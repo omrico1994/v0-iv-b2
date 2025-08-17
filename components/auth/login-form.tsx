@@ -1,7 +1,6 @@
 "use client"
 
-import { useActionState } from "react"
-import { useFormStatus } from "react-dom"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -9,42 +8,44 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import Link from "next/link"
 import { Eye, EyeOff, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
 import { signIn } from "@/lib/actions"
-
-function SubmitButton() {
-  const { pending } = useFormStatus()
-
-  return (
-    <Button type="submit" className="w-full" disabled={pending}>
-      {pending ? (
-        <>
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          Signing in...
-        </>
-      ) : (
-        "Sign in"
-      )}
-    </Button>
-  )
-}
 
 export function LoginForm() {
   const router = useRouter()
-  const [state, formAction] = useActionState(signIn, null)
   const [showPassword, setShowPassword] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (state?.success) {
-      router.push("/")
+  const handleSubmit = async (formData: FormData) => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const result = await signIn(null, formData)
+      if (result?.success) {
+        router.push("/")
+      } else if (result?.error) {
+        setError(result.error)
+      }
+    } catch (err) {
+      setError("An unexpected error occurred. Please try again.")
+    } finally {
+      setIsLoading(false)
     }
-  }, [state, router])
+  }
 
   return (
-    <form action={formAction} className="space-y-4">
-      {state?.error && (
+    <form
+      onSubmit={async (e) => {
+        e.preventDefault()
+        const formData = new FormData(e.currentTarget)
+        await handleSubmit(formData)
+      }}
+      className="space-y-4"
+    >
+      {error && (
         <Alert variant="destructive">
-          <AlertDescription>{state.error}</AlertDescription>
+          <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
@@ -88,7 +89,16 @@ export function LoginForm() {
         </div>
       </div>
 
-      <SubmitButton />
+      <Button type="submit" className="w-full" disabled={isLoading}>
+        {isLoading ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Signing in...
+          </>
+        ) : (
+          "Sign in"
+        )}
+      </Button>
     </form>
   )
 }
