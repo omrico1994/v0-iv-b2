@@ -1,72 +1,24 @@
-import { updateSession } from "@/lib/supabase/middleware"
-import { checkRateLimit, apiRateLimiter, authRateLimiter } from "@/lib/utils/rate-limiter"
-import { getClientIP } from "@/lib/utils/security"
-import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
+import type { NextRequest } from "next/server"
+import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs"
 
-export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl
-  const clientIP = getClientIP(request)
+export async function middleware(req: NextRequest) {
+  const res = NextResponse.next()
 
-  // Apply rate limiting to auth routes
-  if (pathname.startsWith("/auth/") || pathname.startsWith("/api/auth/")) {
-    const { success, headers } = await checkRateLimit(authRateLimiter, clientIP)
+  const supabase = createMiddlewareClient(
+    { req, res },
+    {
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    },
+  )
 
-    if (!success) {
-      return new NextResponse("Too Many Requests", {
-        status: 429,
-        headers: {
-          ...headers,
-          "Content-Type": "application/json",
-        },
-      })
-    }
-  }
+  // Touch session so cookies are parsed/maintained
+  await supabase.auth.getSession()
 
-  // Apply rate limiting to API routes
-  if (pathname.startsWith("/api/")) {
-    const { success, headers } = await checkRateLimit(apiRateLimiter, clientIP)
-
-    if (!success) {
-      return new NextResponse("Too Many Requests", {
-        status: 429,
-        headers: {
-          ...headers,
-          "Content-Type": "application/json",
-        },
-      })
-    }
-  }
-
-  // Security headers for all requests
-  const response = await updateSession(request)
-
-  // Add security headers
-  response.headers.set("X-Request-ID", crypto.randomUUID())
-  response.headers.set("X-Timestamp", new Date().toISOString())
-
-  // Prevent clickjacking
-  if (!response.headers.get("X-Frame-Options")) {
-    response.headers.set("X-Frame-Options", "DENY")
-  }
-
-  // Prevent MIME type sniffing
-  if (!response.headers.get("X-Content-Type-Options")) {
-    response.headers.set("X-Content-Type-Options", "nosniff")
-  }
-
-  return response
+  return res
 }
 
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * Feel free to modify this pattern to include more paths.
-     */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 }
