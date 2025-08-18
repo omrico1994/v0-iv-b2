@@ -1,45 +1,51 @@
+import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
+import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import { cookies } from "next/headers"
-import { createServerComponentClient, createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
-import { createClient } from "@supabase/supabase-js"
+import { cache } from "react"
 
-/**
- * Use in Server Components (e.g., app/page.tsx):
- */
-export function createServerClient() {
-  return createServerComponentClient(
-    { cookies },
-    {
-      supabaseUrl: process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      supabaseKey: process.env.SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    },
-  )
-}
+// Check if Supabase environment variables are available
+export const isSupabaseConfigured =
+  typeof process.env.NEXT_PUBLIC_SUPABASE_URL === "string" &&
+  process.env.NEXT_PUBLIC_SUPABASE_URL.length > 0 &&
+  typeof process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY === "string" &&
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY.length > 0
 
-/**
- * Use in Route Handlers (e.g., app/api/auth/route.ts):
- */
-export function createServerRouteClient(cookiesStore?: ReturnType<typeof cookies>) {
-  return createRouteHandlerClient(
-    { cookies: cookiesStore ?? cookies() },
-    {
-      supabaseUrl: process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      supabaseKey: process.env.SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    },
-  )
-}
+// Create a cached version of the Supabase client for Server Components
+export const createClient = cache(() => {
+  const cookieStore = cookies()
 
-export function createServiceRoleClient() {
-  const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-  if (!serviceRoleKey) {
-    throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for service role operations")
+  if (!isSupabaseConfigured) {
+    console.warn("Supabase environment variables are not set. Using dummy client.")
+    return {
+      auth: {
+        getUser: () => Promise.resolve({ data: { user: null }, error: null }),
+        getSession: () => Promise.resolve({ data: { session: null }, error: null }),
+        signInWithPassword: () =>
+          Promise.resolve({ data: { user: null, session: null }, error: { message: "Supabase not configured" } }),
+      },
+    }
   }
 
-  return createClient(supabaseUrl, serviceRoleKey, {
+  return createServerComponentClient({ cookies: () => cookieStore })
+})
+
+// Create service role client for admin operations (bypasses RLS)
+export const createServiceClient = cache(() => {
+  const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!serviceRoleKey) {
+    console.warn("SUPABASE_SERVICE_ROLE_KEY is not set. Service operations will not work.")
+    return null
+  }
+
+  return createSupabaseClient(supabaseUrl, serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
     },
   })
-}
+})
+
+export const createServerClient = createClient
+export const createServiceRoleClient = createServiceClient

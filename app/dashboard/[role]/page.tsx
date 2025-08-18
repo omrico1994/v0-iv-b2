@@ -1,5 +1,5 @@
-import { notFound } from "next/navigation"
-import { getCurrentUserContext } from "@/lib/auth/getCurrentUserContext"
+import { notFound, redirect } from "next/navigation"
+import { getCurrentUser } from "@/lib/auth/get-user"
 import { OwnerDashboard } from "@/components/dashboard/owner-dashboard"
 import { RetailerDashboard } from "@/components/dashboard/retailer-dashboard"
 import { LocationStaffDashboard } from "@/components/dashboard/location-staff-dashboard"
@@ -22,35 +22,22 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
     notFound()
   }
 
-  const userContext = await getCurrentUserContext()
+  const user = await getCurrentUser()
 
-  if (!userContext) {
-    // User is not authenticated, this should be handled by middleware
-    // but adding as fallback
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="max-w-md w-full space-y-8 p-8">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">Authentication Required</h1>
-            <p className="text-gray-600">Please log in to access this page.</p>
-          </div>
-        </div>
-      </div>
-    )
+  if (!user) {
+    // User is not authenticated, redirect to login
+    redirect("/auth/login")
+  }
+
+  if (!user.role) {
+    // User has no role, redirect to access pending
+    redirect("/")
   }
 
   // Check if user's role matches the requested dashboard
-  if (userContext.role !== role) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="max-w-md w-full space-y-8 p-8">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">You don't have access to this page</h1>
-            <p className="text-gray-600">Your current role does not allow access to this dashboard.</p>
-          </div>
-        </div>
-      </div>
-    )
+  if (user.role !== role) {
+    // Redirect to correct dashboard for user's role
+    redirect(`/dashboard/${user.role}`)
   }
 
   // Render appropriate dashboard based on role

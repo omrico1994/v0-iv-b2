@@ -59,23 +59,9 @@ export function UpdatePasswordForm() {
     }
   }
 
-  const handleContinue = async () => {
-    const supabase = createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (user) {
-      const { data: roleRow } = await supabase.from("user_roles").select("role").eq("user_id", user.id).maybeSingle()
-
-      if (roleRow?.role) {
-        router.push(`/dashboard/${roleRow.role}`)
-      } else {
-        router.push("/")
-      }
-    } else {
-      router.push("/auth/login")
-    }
+  const handleContinue = () => {
+    router.push("/")
+    router.refresh()
   }
 
   if (isSuccess) {

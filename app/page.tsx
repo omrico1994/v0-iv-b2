@@ -1,4 +1,21 @@
-export default function HomePage() {
+import { redirect } from "next/navigation"
+import { getCurrentUser } from "@/lib/auth/get-user"
+
+export default async function HomePage() {
+  const user = await getCurrentUser()
+
+  // If user is not authenticated, middleware should handle redirect to login
+  // This is a fallback in case middleware doesn't catch it
+  if (!user) {
+    redirect("/auth/login")
+  }
+
+  // If user has a role, redirect to appropriate dashboard
+  if (user.role) {
+    redirect(`/dashboard/${user.role}`)
+  }
+
+  // User is authenticated but has no role - show access pending
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="max-w-md w-full space-y-8 p-8">

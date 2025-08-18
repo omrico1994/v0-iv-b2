@@ -11,7 +11,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { LogOut, Settings, User } from "lucide-react"
-import { signOut } from "@/lib/actions"
+import { createClient } from "@/lib/supabase/client"
+import { useRouter } from "next/navigation"
 
 interface DashboardHeaderProps {
   role: "owner" | "retailer" | "location_staff" | "backoffice"
@@ -20,6 +21,8 @@ interface DashboardHeaderProps {
 }
 
 export function DashboardHeader({ role, userName = "User", userEmail = "user@example.com" }: DashboardHeaderProps) {
+  const router = useRouter()
+
   const roleNames = {
     owner: "Owner",
     retailer: "Retailer",
@@ -29,7 +32,12 @@ export function DashboardHeader({ role, userName = "User", userEmail = "user@exa
 
   const handleLogout = async () => {
     try {
-      await signOut()
+      const supabase = createClient()
+      await supabase.auth.signOut()
+
+      // Redirect to login page
+      router.push("/auth/login")
+      router.refresh()
     } catch (error) {
       console.error("Error signing out:", error)
     }

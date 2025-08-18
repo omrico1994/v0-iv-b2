@@ -14,30 +14,32 @@ export function ResetPasswordForm() {
   const [email, setEmail] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
-  const [error, setError] = useState("")
+  const [error, setError] = useState<string | null>(null)
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsLoading(true)
-    setError("")
+    setError(null)
 
     try {
       const supabase = createClient()
 
+      const redirectTo =
+        process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/auth/update-password`
+
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/update-password`,
+        redirectTo,
       })
 
       if (resetError) {
         setError("There was an error sending the reset email. Please try again.")
-        setIsLoading(false)
         return
       }
 
-      setIsLoading(false)
       setIsSuccess(true)
     } catch (err) {
-      setError("There was an error sending the reset email. Please try again.")
+      setError("An unexpected error occurred. Please try again.")
+    } finally {
       setIsLoading(false)
     }
   }
@@ -54,14 +56,7 @@ export function ResetPasswordForm() {
             If there's an account for that email, a reset link has been sent.
           </p>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => {
-            setIsSuccess(false)
-            setEmail("")
-          }}
-          className="w-full"
-        >
+        <Button variant="outline" onClick={() => setIsSuccess(false)} className="w-full">
           Send another email
         </Button>
       </div>
@@ -85,7 +80,6 @@ export function ResetPasswordForm() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          disabled={isLoading}
         />
       </div>
 
