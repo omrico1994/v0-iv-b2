@@ -1,5 +1,6 @@
 import type React from "react"
 import { getCurrentUser } from "@/lib/auth/get-user"
+import { UserInfo } from "@/components/dashboard/user-info"
 
 export default async function DashboardLayout({
   children,
@@ -29,12 +30,7 @@ export default async function DashboardLayout({
       <div className="min-h-screen bg-gray-50">
         <div className="p-4">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Dashboard</h1>
-          <div className="bg-white p-4 rounded-lg shadow mb-4">
-            <h2 className="text-lg font-semibold mb-2">User Info</h2>
-            <p>Email: {user.email}</p>
-            <p>Role: {user.role}</p>
-            <p>ID: {user.id}</p>
-          </div>
+          <UserInfo user={user} />
           <div className="bg-white p-4 rounded-lg shadow">{children}</div>
         </div>
       </div>
