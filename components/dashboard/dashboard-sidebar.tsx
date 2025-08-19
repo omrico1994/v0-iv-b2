@@ -112,10 +112,10 @@ export function DashboardSidebar({ user }: DashboardSidebarProps) {
   const navigationItems = getNavigationItems()
 
   return (
-    <div className="w-64 bg-sidebar border-r border-sidebar-border">
+    <div className="w-64 bg-gray-50 border-r border-gray-200">
       <div className="p-6">
-        <h2 className="text-lg font-semibold text-sidebar-foreground">Business Portal</h2>
-        <p className="text-sm text-sidebar-foreground/70">{user.role.replace("_", " ").toUpperCase()}</p>
+        <h2 className="text-lg font-semibold text-gray-900">Business Portal</h2>
+        <p className="text-sm text-gray-600">{user.role.replace("_", " ").toUpperCase()}</p>
       </div>
 
       <nav className="px-4 space-y-2">
@@ -129,9 +129,7 @@ export function DashboardSidebar({ user }: DashboardSidebarProps) {
               href={item.href}
               className={cn(
                 "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
-                isActive
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                isActive ? "bg-blue-600 text-white" : "text-gray-700 hover:bg-gray-100 hover:text-gray-900",
               )}
             >
               <Icon className="h-4 w-4" />
