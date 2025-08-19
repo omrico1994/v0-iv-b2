@@ -1,4 +1,5 @@
 import type React from "react"
+import { ErrorBoundary } from "@/components/error-boundary"
 
 export default function DashboardLayout({
   children,
@@ -6,17 +7,21 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="p-4">
-        <h1 className="text-2xl font-bold text-gray-900 mb-4">Dashboard</h1>
-        <div className="bg-white p-4 rounded-lg shadow mb-4">
-          <h2 className="text-lg font-semibold mb-2">User Info</h2>
-          <p>Email: admin@iv-relife.com</p>
-          <p>Role: admin</p>
-          <p>Status: Ultra-minimal layout</p>
+    <ErrorBoundary>
+      <div className="min-h-screen bg-gray-50">
+        <div className="p-4">
+          <ErrorBoundary
+            fallback={
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <h2 className="text-lg font-semibold text-red-800">Layout Error</h2>
+                <p className="text-red-700 mt-2">An error occurred while loading the dashboard layout.</p>
+              </div>
+            }
+          >
+            <div className="bg-white p-4 rounded-lg shadow">{children}</div>
+          </ErrorBoundary>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow">{children}</div>
       </div>
-    </div>
+    </ErrorBoundary>
   )
 }

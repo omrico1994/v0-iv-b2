@@ -1,6 +1,44 @@
 import { getCurrentUser } from "@/lib/auth/get-user"
+import { Suspense } from "react"
 
 export const dynamic = "force-dynamic"
+
+function DashboardContent() {
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="bg-white p-6 rounded-lg shadow border">
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Quick Actions</h2>
+          <p className="text-gray-600">Access your most common tasks and features.</p>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow border">
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Recent Activity</h2>
+          <p className="text-gray-600">View your recent system activity and updates.</p>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow border">
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">System Status</h2>
+          <p className="text-gray-600">Monitor system health and performance.</p>
+        </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-lg shadow border">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Getting Started</h2>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="p-4 border rounded-lg bg-gray-50">
+            <h3 className="font-medium text-gray-900">Setup Complete</h3>
+            <p className="text-sm text-gray-600 mt-1">Your authentication system is working properly.</p>
+          </div>
+          <div className="p-4 border rounded-lg bg-gray-50">
+            <h3 className="font-medium text-gray-900">Next Steps</h3>
+            <p className="text-sm text-gray-600 mt-1">Ready to build system features with role-based access control.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default async function DashboardPage() {
   let user = null
@@ -10,7 +48,6 @@ export default async function DashboardPage() {
     user = await getCurrentUser()
   } catch (err) {
     error = err
-    console.log("[v0] Dashboard page caught error:", err)
   }
 
   // If there's a database error, show a fallback UI
@@ -55,36 +92,22 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <div className="bg-white p-6 rounded-lg shadow border">
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Quick Actions</h2>
-          <p className="text-gray-600">Access your most common tasks and features.</p>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow border">
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Recent Activity</h2>
-          <p className="text-gray-600">View your recent system activity and updates.</p>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow border">
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">System Status</h2>
-          <p className="text-gray-600">Monitor system health and performance.</p>
-        </div>
-      </div>
-
-      <div className="bg-white p-6 rounded-lg shadow border">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Getting Started</h2>
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="p-4 border rounded-lg bg-gray-50">
-            <h3 className="font-medium text-gray-900">Setup Complete</h3>
-            <p className="text-sm text-gray-600 mt-1">Your authentication system is working properly.</p>
+      <Suspense
+        fallback={
+          <div className="space-y-6">
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="bg-white p-6 rounded-lg shadow border">
+                  <div className="h-6 bg-gray-200 rounded animate-pulse mb-2"></div>
+                  <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="p-4 border rounded-lg bg-gray-50">
-            <h3 className="font-medium text-gray-900">Next Steps</h3>
-            <p className="text-sm text-gray-600 mt-1">Ready to build system features with role-based access control.</p>
-          </div>
-        </div>
-      </div>
+        }
+      >
+        <DashboardContent />
+      </Suspense>
     </div>
   )
 }
