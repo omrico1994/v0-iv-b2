@@ -32,8 +32,8 @@ export async function signIn(prevState: any, formData: FormData) {
       return { error: error.message }
     }
 
-    // Return success instead of redirecting directly
-    return { success: true }
+    // Server handles redirect directly - no client-side navigation needed
+    redirect("/dashboard")
   } catch (error) {
     console.error("Login error:", error)
     return { error: "An unexpected error occurred. Please try again." }

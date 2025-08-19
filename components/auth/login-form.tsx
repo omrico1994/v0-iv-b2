@@ -1,6 +1,5 @@
 "use client"
 import { useState, useTransition } from "react"
-import { useRouter } from "next/navigation"
 import { signIn } from "@/lib/actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,7 +9,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 export function LoginForm() {
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
-  const router = useRouter()
 
   const handleSubmit = async (formData: FormData) => {
     setError(null)
@@ -18,10 +16,8 @@ export function LoginForm() {
       const result = await signIn(null, formData)
       if (result?.error) {
         setError(result.error)
-      } else if (result?.success) {
-        router.push("/dashboard")
-        router.refresh()
       }
+      // No success handling needed - server redirects automatically
     })
   }
 
