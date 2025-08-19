@@ -36,9 +36,14 @@ export default async function DashboardLayout({
       </div>
     )
   } catch (error) {
+    console.log("[v0] Dashboard layout caught error:", error)
+    console.log("[v0] Error message:", String(error))
+
     const errorMessage = String(error)
     const isDatabaseError =
       errorMessage.includes("relation") || errorMessage.includes("table") || errorMessage.includes("does not exist")
+
+    console.log("[v0] Is database error:", isDatabaseError)
 
     if (isDatabaseError) {
       return (
