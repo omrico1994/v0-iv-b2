@@ -1,5 +1,7 @@
 import { getCurrentUser } from "@/lib/auth/get-user"
 
+export const dynamic = "force-dynamic"
+
 export default async function DashboardPage() {
   let user = null
   let error = null
