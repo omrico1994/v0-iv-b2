@@ -1,34 +1,35 @@
 "use client"
-import { useFormState } from "react"
+import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { signIn } from "@/lib/actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { useEffect } from "react"
-
-const initialState = {
-  error: null,
-  success: false,
-}
 
 export function LoginForm() {
-  const [state, formAction] = useFormState(signIn, initialState)
+  const [error, setError] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
   const router = useRouter()
 
-  useEffect(() => {
-    if (state?.success) {
-      router.push("/dashboard")
-      router.refresh()
-    }
-  }, [state?.success, router])
+  const handleSubmit = async (formData: FormData) => {
+    setError(null)
+    startTransition(async () => {
+      const result = await signIn(null, formData)
+      if (result?.error) {
+        setError(result.error)
+      } else if (result?.success) {
+        router.push("/dashboard")
+        router.refresh()
+      }
+    })
+  }
 
   return (
-    <form action={formAction} className="space-y-4">
-      {state?.error && (
+    <form action={handleSubmit} className="space-y-4">
+      {error && (
         <Alert variant="destructive">
-          <AlertDescription>{state.error}</AlertDescription>
+          <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
@@ -42,8 +43,8 @@ export function LoginForm() {
         <Input id="password" name="password" type="password" required className="w-full" />
       </div>
 
-      <Button type="submit" className="w-full">
-        Sign In
+      <Button type="submit" className="w-full" disabled={isPending}>
+        {isPending ? "Signing In..." : "Sign In"}
       </Button>
     </form>
   )
