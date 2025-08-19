@@ -1,6 +1,8 @@
 import { getCurrentUser, type UserWithRole } from "./get-user"
-import { hasPermission, canAccessLocation, type Permission } from "./permissions"
+import { hasPermission as checkPermission, canAccessLocation, type Permission } from "./permissions"
 import { redirect } from "next/navigation"
+
+export { checkPermission as hasPermission } from "./permissions"
 
 export class AuthorizationError extends Error {
   constructor(message = "Access denied") {
@@ -22,7 +24,7 @@ export async function requireAuth(): Promise<UserWithRole> {
 export async function requirePermission(permission: Permission): Promise<UserWithRole> {
   const user = await requireAuth()
 
-  if (!hasPermission(user.role, permission)) {
+  if (!checkPermission(user.role, permission)) {
     throw new AuthorizationError(`Permission denied: ${permission}`)
   }
 
@@ -43,7 +45,7 @@ export async function requireLocationAccess(locationId: string, retailerId?: str
 // Client-side authorization hook (for components)
 export function useAuthorization(user: UserWithRole | null) {
   return {
-    hasPermission: (permission: Permission) => (user ? hasPermission(user.role, permission) : false),
+    hasPermission: (permission: Permission) => (user ? checkPermission(user.role, permission) : false),
 
     canAccessLocation: (locationId: string, retailerId?: string) =>
       user ? canAccessLocation(user.role, user.retailer_id, user.locations, locationId, retailerId) : false,

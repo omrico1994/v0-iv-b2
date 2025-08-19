@@ -127,6 +127,53 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
 }
 
+export const PERMISSIONS = {
+  // User Management
+  MANAGE_USERS: "users:create" as Permission,
+  VIEW_USERS: "users:read" as Permission,
+  UPDATE_USERS: "users:update" as Permission,
+  DELETE_USERS: "users:delete" as Permission,
+
+  // Order Management
+  CREATE_ORDERS: "orders:create" as Permission,
+  VIEW_ORDERS: "orders:read" as Permission,
+  UPDATE_ORDERS: "orders:update" as Permission,
+  DELETE_ORDERS: "orders:delete" as Permission,
+
+  // Repair Management
+  CREATE_REPAIRS: "repairs:create" as Permission,
+  VIEW_REPAIRS: "repairs:read" as Permission,
+  UPDATE_REPAIRS: "repairs:update" as Permission,
+  DELETE_REPAIRS: "repairs:delete" as Permission,
+  HANDLE_REPAIRS: "repairs:update" as Permission,
+
+  // Claims Management
+  CREATE_CLAIMS: "claims:create" as Permission,
+  VIEW_CLAIMS: "claims:read" as Permission,
+  UPDATE_CLAIMS: "claims:update" as Permission,
+  DELETE_CLAIMS: "claims:delete" as Permission,
+
+  // Location Management
+  CREATE_LOCATIONS: "locations:create" as Permission,
+  VIEW_LOCATIONS: "locations:read" as Permission,
+  UPDATE_LOCATIONS: "locations:update" as Permission,
+  DELETE_LOCATIONS: "locations:delete" as Permission,
+
+  // Retailer Management
+  CREATE_RETAILERS: "retailers:create" as Permission,
+  VIEW_RETAILERS: "retailers:read" as Permission,
+  UPDATE_RETAILERS: "retailers:update" as Permission,
+  DELETE_RETAILERS: "retailers:delete" as Permission,
+
+  // Reporting
+  VIEW_REPORTS: "reports:read" as Permission,
+  EXPORT_REPORTS: "reports:export" as Permission,
+
+  // System
+  SYSTEM_SETTINGS: "system:settings" as Permission,
+  SYSTEM_AUDIT: "system:audit" as Permission,
+} as const
+
 export function hasPermission(userRole: Role, permission: Permission): boolean {
   return ROLE_PERMISSIONS[userRole].includes(permission)
 }

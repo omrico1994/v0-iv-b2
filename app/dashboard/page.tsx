@@ -1,4 +1,10 @@
+import { getCurrentUser } from "@/lib/auth/get-user"
+import { hasPermission } from "@/lib/auth/authorization"
+import { PERMISSIONS } from "@/lib/auth/permissions"
+
 export default async function DashboardPage() {
+  const user = await getCurrentUser()
+
   return (
     <div className="space-y-6">
       <div>
@@ -20,6 +26,61 @@ export default async function DashboardPage() {
         <div className="bg-white p-6 rounded-lg shadow border">
           <h2 className="text-xl font-semibold text-gray-900 mb-2">System Status</h2>
           <p className="text-gray-600">Monitor system health and performance.</p>
+        </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-lg shadow border">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Role-Based Access Test</h2>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between p-3 bg-gray-50 rounded">
+            <span className="font-medium">User Management</span>
+            <span
+              className={`px-2 py-1 rounded text-sm ${
+                hasPermission(user, PERMISSIONS.MANAGE_USERS)
+                  ? "bg-green-100 text-green-800"
+                  : "bg-red-100 text-red-800"
+              }`}
+            >
+              {hasPermission(user, PERMISSIONS.MANAGE_USERS) ? "Allowed" : "Denied"}
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between p-3 bg-gray-50 rounded">
+            <span className="font-medium">View Claims (Admin/Office Only)</span>
+            <span
+              className={`px-2 py-1 rounded text-sm ${
+                hasPermission(user, PERMISSIONS.VIEW_CLAIMS) ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+              }`}
+            >
+              {hasPermission(user, PERMISSIONS.VIEW_CLAIMS) ? "Allowed" : "Denied"}
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between p-3 bg-gray-50 rounded">
+            <span className="font-medium">Create Orders</span>
+            <span
+              className={`px-2 py-1 rounded text-sm ${
+                hasPermission(user, PERMISSIONS.CREATE_ORDERS)
+                  ? "bg-green-100 text-green-800"
+                  : "bg-red-100 text-red-800"
+              }`}
+            >
+              {hasPermission(user, PERMISSIONS.CREATE_ORDERS) ? "Allowed" : "Denied"}
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between p-3 bg-gray-50 rounded">
+            <span className="font-medium">Handle Repairs</span>
+            <span
+              className={`px-2 py-1 rounded text-sm ${
+                hasPermission(user, PERMISSIONS.HANDLE_REPAIRS)
+                  ? "bg-green-100 text-green-800"
+                  : "bg-red-100 text-red-800"
+              }`}
+            >
+              {hasPermission(user, PERMISSIONS.HANDLE_REPAIRS) ? "Allowed" : "Denied"}
+            </span>
+          </div>
         </div>
       </div>
 
