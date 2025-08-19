@@ -1,5 +1,5 @@
 "use client"
-import { useActionState } from "react"
+import { useState, useTransition } from "react"
 import { signIn } from "@/lib/actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -7,13 +7,25 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 export function LoginForm() {
-  const [state, formAction, isPending] = useActionState(signIn, null)
+  const [error, setError] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
+
+  async function handleSubmit(formData: FormData) {
+    startTransition(async () => {
+      setError(null)
+      const result = await signIn(formData)
+      if (result?.error) {
+        setError(result.error)
+      }
+      // If successful, signIn will redirect automatically
+    })
+  }
 
   return (
-    <form action={formAction} className="space-y-4">
-      {state?.error && (
+    <form action={handleSubmit} className="space-y-4">
+      {error && (
         <Alert variant="destructive">
-          <AlertDescription>{state.error}</AlertDescription>
+          <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
