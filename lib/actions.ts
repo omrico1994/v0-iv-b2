@@ -3,12 +3,12 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 
-export async function signIn(prevState: any, formData: FormData) {
+export async function signIn(formData: FormData) {
   const email = formData.get("email") as string
   const password = formData.get("password") as string
 
   if (!email || !password) {
-    return { error: "Email and password are required" }
+    redirect("/auth/login?error=Email and password are required")
   }
 
   const supabase = createClient()
@@ -20,13 +20,13 @@ export async function signIn(prevState: any, formData: FormData) {
     })
 
     if (error) {
-      return { error: "Invalid email or password" }
+      redirect("/auth/login?error=Invalid email or password")
     }
-
-    redirect("/dashboard")
   } catch (error) {
-    return { error: "Authentication failed. Please try again." }
+    redirect("/auth/login?error=Authentication failed. Please try again.")
   }
+
+  redirect("/dashboard")
 }
 
 export async function signUp(prevState: any, formData: FormData) {
