@@ -1,6 +1,20 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
+// Define protected routes and their required permissions
+const PROTECTED_ROUTES = {
+  "/dashboard/users": ["admin", "office"],
+  "/dashboard/settings": ["admin", "office"],
+  "/dashboard/audit": ["admin", "office"],
+  "/dashboard/retailers": ["admin", "office"],
+  "/dashboard/claims": ["admin", "office"], // Claims are admin/office only
+  "/dashboard/reports": ["admin", "office", "retailer"],
+  "/dashboard/orders": ["admin", "office", "retailer", "location_user"],
+  "/dashboard/locations": ["admin", "office", "retailer"],
+  "/dashboard/my-locations": ["location_user"],
+  "/dashboard/repairs": ["admin", "office", "retailer", "location_user"],
+} as const
+
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
@@ -25,10 +39,6 @@ export async function middleware(request: NextRequest) {
     },
   )
 
-  // IMPORTANT: Avoid writing any logic between createServerClient and
-  // supabase.auth.getUser(). A simple mistake could make it very hard to debug
-  // issues with users being randomly logged out.
-
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -38,13 +48,10 @@ export async function middleware(request: NextRequest) {
   const code = requestUrl.searchParams.get("code")
 
   if (code) {
-    // Exchange the code for a session
     await supabase.auth.exchangeCodeForSession(code)
-    // Redirect to dashboard after successful auth
     return NextResponse.redirect(new URL("/dashboard", request.url))
   }
 
-  // Protected routes - redirect to login if not authenticated
   const isAuthRoute =
     request.nextUrl.pathname.startsWith("/auth/login") ||
     request.nextUrl.pathname.startsWith("/auth/sign-up") ||
@@ -53,37 +60,44 @@ export async function middleware(request: NextRequest) {
   const isDashboardRoute = request.nextUrl.pathname.startsWith("/dashboard")
 
   if (isDashboardRoute && !user) {
-    // Redirect to login if trying to access dashboard without authentication
     const redirectUrl = new URL("/auth/login", request.url)
     return NextResponse.redirect(redirectUrl)
   }
 
   if (isAuthRoute && user) {
-    // Redirect to dashboard if already authenticated and trying to access auth pages
     const redirectUrl = new URL("/dashboard", request.url)
     return NextResponse.redirect(redirectUrl)
   }
 
-  // IMPORTANT: You *must* return the supabaseResponse object as it is. If you're
-  // creating a new response object with NextResponse.next() make sure to:
-  // 1. Pass the request in it, like so:
-  //    const myNewResponse = NextResponse.next({ request })
-  // 2. Copy over the cookies, like so:
-  //    myNewResponse.cookies.setAll(supabaseResponse.cookies.getAll())
-  // 3. Change the myNewResponse object instead of the supabaseResponse object
+  if (isDashboardRoute && user) {
+    // Get user role for route protection
+    try {
+      const { data: userRole } = await supabase.from("user_roles").select("role").eq("user_id", user.id).single()
+
+      if (userRole) {
+        const pathname = request.nextUrl.pathname
+
+        // Check if route requires specific roles
+        for (const [route, allowedRoles] of Object.entries(PROTECTED_ROUTES)) {
+          if (pathname.startsWith(route)) {
+            if (!allowedRoles.includes(userRole.role as any)) {
+              // Redirect to dashboard with access denied message
+              const redirectUrl = new URL("/dashboard?error=access_denied", request.url)
+              return NextResponse.redirect(redirectUrl)
+            }
+            break
+          }
+        }
+      }
+    } catch (error) {
+      // If we can't check role, allow access (will be handled by page-level auth)
+      console.error("Role check failed in middleware:", error)
+    }
+  }
 
   return supabaseResponse
 }
 
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * Feel free to modify this pattern to include more paths.
-     */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
 }
