@@ -15,6 +15,22 @@ export interface CreateUserData {
   isNewRetailer?: boolean
 }
 
+export interface AdminCreateUserData {
+  role: "admin" | "office" | "retailer" | "location_user"
+  email: string
+  firstName: string
+  lastName: string
+  phone?: string
+  businessType?: "new" | "existing"
+  existingRetailerId?: string
+  businessName?: string
+  businessAddress?: string
+  businessPhone?: string
+  businessEmail?: string
+  website?: string
+  invitationMessage?: string
+}
+
 export async function createUser(prevState: any, formData: FormData) {
   try {
     const supabase = createServiceClient()
@@ -163,6 +179,181 @@ export async function createUser(prevState: any, formData: FormData) {
 
     revalidatePath("/admin/users")
     return { success: "User created successfully and invitation sent" }
+  } catch (error) {
+    console.error("Error creating user:", error)
+    return { error: "An unexpected error occurred" }
+  }
+}
+
+export async function createUserFromAdmin(userData: AdminCreateUserData) {
+  try {
+    const supabase = createServiceClient()
+    if (!supabase) {
+      return { error: "Service client not configured" }
+    }
+
+    const currentUser = await getCurrentUser()
+
+    // Check permissions
+    if (!currentUser || !["admin", "office"].includes(currentUser.role)) {
+      return { error: "Unauthorized to create users" }
+    }
+
+    // Validate required fields
+    if (!userData.email || !userData.firstName || !userData.lastName || !userData.role) {
+      return { error: "Missing required fields" }
+    }
+
+    // Role-specific validations
+    if (
+      (userData.role === "retailer" || userData.role === "location_user") &&
+      userData.businessType === "new" &&
+      !userData.businessName
+    ) {
+      return { error: "Business name is required for new retailer" }
+    }
+
+    if (
+      (userData.role === "retailer" || userData.role === "location_user") &&
+      userData.businessType === "existing" &&
+      !userData.existingRetailerId
+    ) {
+      return { error: "Must select an existing retailer" }
+    }
+
+    // Check if user already exists
+    const { data: existingUser } = await supabase.auth.admin.getUserByEmail(userData.email)
+    if (existingUser.user) {
+      return { error: "User with this email already exists" }
+    }
+
+    // Create user in Supabase Auth
+    const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
+      email: userData.email,
+      email_confirm: false, // They'll confirm via invitation
+      user_metadata: {
+        first_name: userData.firstName,
+        last_name: userData.lastName,
+        phone: userData.phone,
+        role: userData.role,
+        created_by: currentUser.id,
+      },
+    })
+
+    if (authError || !authUser.user) {
+      return { error: authError?.message || "Failed to create user account" }
+    }
+
+    // Create user profile
+    const { error: profileError } = await supabase.from("user_profiles").insert({
+      id: authUser.user.id,
+      first_name: userData.firstName,
+      last_name: userData.lastName,
+      phone: userData.phone,
+      business_setup_completed:
+        userData.role === "admin" || userData.role === "office" || userData.businessType === "existing",
+    })
+
+    if (profileError) {
+      // Cleanup auth user if profile creation fails
+      await supabase.auth.admin.deleteUser(authUser.user.id)
+      return { error: "Failed to create user profile" }
+    }
+
+    // Handle retailer creation or assignment
+    let retailerId = userData.existingRetailerId
+    if ((userData.role === "retailer" || userData.role === "location_user") && userData.businessType === "new") {
+      const { data: retailer, error: retailerError } = await supabase
+        .from("retailers")
+        .insert({
+          name: userData.businessName!.toLowerCase().replace(/\s+/g, ""),
+          business_name: userData.businessName!,
+          full_address: userData.businessAddress || "",
+          business_phone: userData.businessPhone || "",
+          business_email: userData.businessEmail || userData.email,
+          website: userData.website || "",
+          contact_person: `${userData.firstName} ${userData.lastName}`,
+          created_by: currentUser.id,
+        })
+        .select("id")
+        .single()
+
+      if (retailerError || !retailer) {
+        await supabase.auth.admin.deleteUser(authUser.user.id)
+        return { error: "Failed to create retailer business" }
+      }
+      retailerId = retailer.id
+    }
+
+    // Create user role assignment
+    const { error: roleError } = await supabase.from("user_roles").insert({
+      user_id: authUser.user.id,
+      role: userData.role,
+      retailer_id: retailerId || null,
+    })
+
+    if (roleError) {
+      await supabase.auth.admin.deleteUser(authUser.user.id)
+      return { error: "Failed to assign user role" }
+    }
+
+    // Create user invitation record
+    const { error: invitationError } = await supabase.from("user_invitations").insert({
+      user_id: authUser.user.id,
+      email: userData.email,
+      role: userData.role,
+      invited_by: currentUser.id,
+      message:
+        userData.invitationMessage ||
+        "Welcome to our business management system. Please complete your account setup using the link below.",
+      status: "pending",
+    })
+
+    if (invitationError) {
+      console.error("Failed to create invitation record:", invitationError)
+      // Don't fail the entire operation for this
+    }
+
+    // Send invitation email
+    const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(userData.email, {
+      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/auth/setup-account`,
+    })
+
+    if (inviteError) {
+      console.error("Failed to send invitation email:", inviteError)
+      // Update invitation status but don't fail the operation
+      await supabase
+        .from("user_invitations")
+        .update({ status: "failed", error_message: inviteError.message })
+        .eq("user_id", authUser.user.id)
+    } else {
+      // Update invitation status to sent
+      await supabase
+        .from("user_invitations")
+        .update({ status: "sent", sent_at: new Date().toISOString() })
+        .eq("user_id", authUser.user.id)
+    }
+
+    // Log audit trail
+    await supabase.from("audit_logs").insert({
+      user_id: currentUser.id,
+      action: "CREATE",
+      table_name: "users",
+      record_id: authUser.user.id,
+      new_data: {
+        email: userData.email,
+        role: userData.role,
+        retailer_id: retailerId,
+        business_type: userData.businessType,
+      },
+    })
+
+    revalidatePath("/dashboard/admin/users")
+    return {
+      success: "User created successfully and invitation sent",
+      userId: authUser.user.id,
+      email: userData.email,
+    }
   } catch (error) {
     console.error("Error creating user:", error)
     return { error: "An unexpected error occurred" }
