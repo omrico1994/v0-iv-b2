@@ -10,19 +10,8 @@ export function LoginForm() {
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
-  async function handleSubmit(formData: FormData) {
-    startTransition(async () => {
-      setError(null)
-      const result = await signIn(formData)
-      if (result?.error) {
-        setError(result.error)
-      }
-      // If successful, signIn will redirect automatically
-    })
-  }
-
   return (
-    <form action={handleSubmit} className="space-y-4">
+    <form action={signIn} className="space-y-4">
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
