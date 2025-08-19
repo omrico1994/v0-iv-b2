@@ -1,5 +1,4 @@
 import type React from "react"
-import { redirect } from "next/navigation"
 import { getCurrentUser } from "@/lib/auth/get-user"
 
 export default async function DashboardLayout({
@@ -24,8 +23,20 @@ export default async function DashboardLayout({
     }
 
     if (!user) {
-      console.log("[v0] No user found, redirecting to login...")
-      redirect("/auth/login")
+      console.log("[v0] No user found, showing login prompt...")
+      return (
+        <div className="min-h-screen bg-blue-50 p-4">
+          <div className="max-w-md mx-auto mt-20">
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h1 className="text-2xl font-bold text-gray-900 mb-4">Authentication Required</h1>
+              <p className="text-gray-600 mb-4">Please log in to access the dashboard.</p>
+              <a href="/auth/login" className="inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                Go to Login
+              </a>
+            </div>
+          </div>
+        </div>
+      )
     }
 
     console.log("[v0] Rendering dashboard layout...")
