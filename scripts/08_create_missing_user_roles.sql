@@ -32,10 +32,10 @@ ON CONFLICT (user_id) DO UPDATE SET
   updated_at = NOW();
 
 -- Create location memberships for the retailer (access to their locations)
-INSERT INTO user_location_memberships (user_id, location_id, created_at, updated_at)
+INSERT INTO user_location_memberships (user_id, location_id, created_at)
 VALUES 
-  ('8e2d12d3-7648-4633-912e-dec6ccd2ff92', '550e8400-e29b-41d4-a716-446655440002', NOW(), NOW()),
-  ('8e2d12d3-7648-4633-912e-dec6ccd2ff92', '550e8400-e29b-41d4-a716-446655440003', NOW(), NOW())
+  ('8e2d12d3-7648-4633-912e-dec6ccd2ff92', '550e8400-e29b-41d4-a716-446655440002', NOW()),
+  ('8e2d12d3-7648-4633-912e-dec6ccd2ff92', '550e8400-e29b-41d4-a716-446655440003', NOW())
 ON CONFLICT (user_id, location_id) DO NOTHING;
 
 -- Verify the data was created correctly
