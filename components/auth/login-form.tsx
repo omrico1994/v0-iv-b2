@@ -1,90 +1,50 @@
 "use client"
-
-import type React from "react"
-
-import { useState } from "react"
+import { useFormState } from "react"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
-import { createClient } from "@/lib/supabase/client"
+import { signIn } from "@/lib/actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useEffect } from "react"
+
+const initialState = {
+  error: null,
+  success: false,
+}
 
 export function LoginForm() {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [error, setError] = useState("")
-  const [loading, setLoading] = useState(false)
+  const [state, formAction] = useFormState(signIn, initialState)
   const router = useRouter()
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError("")
-
-    try {
-      const supabase = createClient()
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-
-      if (error) {
-        setError(error.message)
-      } else {
-        router.push("/dashboard")
-        router.refresh()
-      }
-    } catch (err) {
-      setError("An unexpected error occurred")
-    } finally {
-      setLoading(false)
+  useEffect(() => {
+    if (state?.success) {
+      router.push("/dashboard")
+      router.refresh()
     }
-  }
+  }, [state?.success, router])
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      {error && (
+    <form action={formAction} className="space-y-4">
+      {state?.error && (
         <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{state.error}</AlertDescription>
         </Alert>
       )}
 
       <div className="space-y-2">
         <Label htmlFor="email">Email</Label>
-        <Input
-          id="email"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          className="w-full"
-        />
+        <Input id="email" name="email" type="email" required className="w-full" />
       </div>
 
       <div className="space-y-2">
         <Label htmlFor="password">Password</Label>
-        <Input
-          id="password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          className="w-full"
-        />
+        <Input id="password" name="password" type="password" required className="w-full" />
       </div>
 
-      <Button type="submit" className="w-full" disabled={loading}>
-        {loading ? "Signing in..." : "Sign In"}
+      <Button type="submit" className="w-full">
+        Sign In
       </Button>
-
-      <div className="text-center text-sm text-muted-foreground">
-        Don't have an account?{" "}
-        <Link href="/auth/sign-up" className="text-accent hover:underline">
-          Sign up
-        </Link>
-      </div>
     </form>
   )
 }
