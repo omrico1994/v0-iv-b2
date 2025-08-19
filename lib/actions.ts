@@ -8,7 +8,7 @@ export async function signIn(formData: FormData) {
   const password = formData.get("password") as string
 
   if (!email || !password) {
-    redirect("/auth/login?error=Email and password are required")
+    return { error: "Email and password are required" }
   }
 
   const supabase = createClient()
@@ -20,12 +20,12 @@ export async function signIn(formData: FormData) {
     })
 
     if (error) {
-      redirect("/auth/login?error=Invalid email or password")
+      return { error: "Invalid email or password" }
     }
 
     redirect("/dashboard")
   } catch (error) {
-    redirect("/auth/login?error=Authentication failed. Please try again.")
+    return { error: "Authentication failed. Please try again." }
   }
 }
 

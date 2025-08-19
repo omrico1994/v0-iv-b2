@@ -1,5 +1,5 @@
 "use client"
-import { useSearchParams } from "next/navigation"
+import { useActionState } from "react"
 import { signIn } from "@/lib/actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -7,14 +7,13 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 export function LoginForm() {
-  const searchParams = useSearchParams()
-  const error = searchParams.get("error")
+  const [state, formAction, isPending] = useActionState(signIn, null)
 
   return (
-    <form action={signIn} className="space-y-4">
-      {error && (
+    <form action={formAction} className="space-y-4">
+      {state?.error && (
         <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{state.error}</AlertDescription>
         </Alert>
       )}
 
@@ -28,8 +27,8 @@ export function LoginForm() {
         <Input id="password" name="password" type="password" required className="w-full" />
       </div>
 
-      <Button type="submit" className="w-full">
-        Sign In
+      <Button type="submit" className="w-full" disabled={isPending}>
+        {isPending ? "Signing In..." : "Sign In"}
       </Button>
     </form>
   )
