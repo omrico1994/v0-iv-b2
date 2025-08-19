@@ -1,6 +1,4 @@
 export default async function DashboardPage() {
-  console.log("[v0] Dashboard page rendering...")
-
   return (
     <div className="space-y-6">
       <div>

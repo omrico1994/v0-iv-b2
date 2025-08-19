@@ -6,24 +6,10 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  console.log("[v0] Dashboard layout starting...")
-
   try {
-    console.log("[v0] Calling getCurrentUser...")
     const user = await getCurrentUser()
-    console.log("[v0] getCurrentUser result:", user ? "User found" : "No user")
-
-    if (user) {
-      console.log("[v0] User details:", {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        hasLocationMemberships: user.locations?.length > 0,
-      })
-    }
 
     if (!user) {
-      console.log("[v0] No user found, showing login prompt...")
       return (
         <div className="min-h-screen bg-blue-50 p-4">
           <div className="max-w-md mx-auto mt-20">
@@ -39,7 +25,6 @@ export default async function DashboardLayout({
       )
     }
 
-    console.log("[v0] Rendering dashboard layout...")
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="p-4">
@@ -55,8 +40,6 @@ export default async function DashboardLayout({
       </div>
     )
   } catch (error) {
-    console.error("[v0] Dashboard layout error:", error)
-
     const errorMessage = String(error)
     const isDatabaseError =
       errorMessage.includes("relation") || errorMessage.includes("table") || errorMessage.includes("does not exist")
