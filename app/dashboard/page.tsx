@@ -1,13 +1,56 @@
 import { getCurrentUser } from "@/lib/auth/get-user"
 
 export default async function DashboardPage() {
-  const user = await getCurrentUser()
+  let user = null
+  let error = null
+
+  try {
+    user = await getCurrentUser()
+  } catch (err) {
+    error = err
+    console.log("[v0] Dashboard page caught error:", err)
+  }
+
+  // If there's a database error, show a fallback UI
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <h2 className="text-lg font-semibold text-yellow-800">Database Setup Required</h2>
+          <p className="text-yellow-700 mt-2">
+            The user authentication system needs to be configured. Please contact your administrator.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // If no user found, show login prompt
+  if (!user) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h2 className="text-lg font-semibold text-blue-800">Authentication Required</h2>
+          <p className="text-blue-700 mt-2">Please log in to access the dashboard.</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-semibold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600">Welcome to your dashboard</p>
+        <p className="text-gray-600">Welcome to your dashboard, {user.first_name || user.email}</p>
+      </div>
+
+      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+        <h2 className="text-lg font-semibold text-green-800">Authentication Successful</h2>
+        <div className="mt-2 text-green-700">
+          <p>Email: {user.email}</p>
+          <p>Role: {user.role}</p>
+          <p>User ID: {user.id}</p>
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
