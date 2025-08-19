@@ -1,7 +1,3 @@
-"use client"
-
-import { useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
 import type { UserWithRole } from "@/lib/auth/get-user"
 import { Button } from "@/components/ui/button"
 import {
@@ -13,22 +9,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { LogOut, User } from "lucide-react"
+import { User } from "lucide-react"
+import { LogoutButton } from "./logout-button"
 
 interface DashboardHeaderProps {
   user: UserWithRole
 }
 
 export function DashboardHeader({ user }: DashboardHeaderProps) {
-  const router = useRouter()
-
-  const handleSignOut = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push("/auth/login")
-    router.refresh()
-  }
-
   const getInitials = (email: string) => {
     return email.substring(0, 2).toUpperCase()
   }
@@ -62,10 +50,7 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
               <span>Profile</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleSignOut}>
-              <LogOut className="mr-2 h-4 w-4" />
-              <span>Log out</span>
-            </DropdownMenuItem>
+            <LogoutButton />
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

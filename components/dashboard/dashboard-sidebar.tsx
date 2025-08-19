@@ -1,18 +1,12 @@
-"use client"
-
-import Link from "next/link"
-import { usePathname } from "next/navigation"
 import type { UserWithRole } from "@/lib/auth/get-user"
-import { cn } from "@/lib/utils"
 import { LayoutDashboard, Users, Settings, FileText, ShoppingCart, MapPin, Building2 } from "lucide-react"
+import { SidebarNavigation } from "./sidebar-navigation"
 
 interface DashboardSidebarProps {
   user: UserWithRole
 }
 
 export function DashboardSidebar({ user }: DashboardSidebarProps) {
-  const pathname = usePathname()
-
   const getNavigationItems = () => {
     const baseItems = [
       {
@@ -118,26 +112,7 @@ export function DashboardSidebar({ user }: DashboardSidebarProps) {
         <p className="text-sm text-gray-600">{user.role.replace("_", " ").toUpperCase()}</p>
       </div>
 
-      <nav className="px-4 space-y-2">
-        {navigationItems.map((item) => {
-          const Icon = item.icon
-          const isActive = pathname === item.href
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
-                isActive ? "bg-blue-600 text-white" : "text-gray-700 hover:bg-gray-100 hover:text-gray-900",
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {item.name}
-            </Link>
-          )
-        })}
-      </nav>
+      <SidebarNavigation items={navigationItems} />
     </div>
   )
 }
