@@ -3,38 +3,29 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 
-export async function signIn(prevState: any, formData: FormData) {
-  // Check if formData is valid
-  if (!formData) {
-    return { error: "Form data is missing" }
-  }
+export async function signIn(formData: FormData) {
+  const email = formData.get("email") as string
+  const password = formData.get("password") as string
 
-  const email = formData.get("email")
-  const password = formData.get("password")
-
-  // Validate required fields
   if (!email || !password) {
-    return { error: "Email and password are required" }
+    redirect("/auth/login?error=Email and password are required")
   }
 
   const supabase = createClient()
 
   try {
     const { error } = await supabase.auth.signInWithPassword({
-      email: email.toString(),
-      password: password.toString(),
+      email,
+      password,
     })
 
     if (error) {
-      console.error("Supabase auth error:", error)
-      return { error: error.message }
+      redirect("/auth/login?error=Invalid email or password")
     }
 
-    // Server handles redirect directly - no client-side navigation needed
     redirect("/dashboard")
   } catch (error) {
-    console.error("Login error:", error)
-    return { error: "An unexpected error occurred. Please try again." }
+    redirect("/auth/login?error=Authentication failed. Please try again.")
   }
 }
 

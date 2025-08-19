@@ -1,5 +1,5 @@
 "use client"
-import { useState, useTransition } from "react"
+import { useSearchParams } from "next/navigation"
 import { signIn } from "@/lib/actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -7,8 +7,8 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 export function LoginForm() {
-  const [error, setError] = useState<string | null>(null)
-  const [isPending, startTransition] = useTransition()
+  const searchParams = useSearchParams()
+  const error = searchParams.get("error")
 
   return (
     <form action={signIn} className="space-y-4">
@@ -28,8 +28,8 @@ export function LoginForm() {
         <Input id="password" name="password" type="password" required className="w-full" />
       </div>
 
-      <Button type="submit" className="w-full" disabled={isPending}>
-        {isPending ? "Signing In..." : "Sign In"}
+      <Button type="submit" className="w-full">
+        Sign In
       </Button>
     </form>
   )
