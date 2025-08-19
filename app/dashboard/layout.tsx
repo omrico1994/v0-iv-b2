@@ -1,5 +1,5 @@
 import type React from "react"
-import { getCurrentUser } from "@/lib/auth/get-user"
+import { getSimpleUser } from "@/lib/auth/simple-get-user"
 import { UserInfo } from "@/components/dashboard/user-info"
 
 export default async function DashboardLayout({
@@ -8,7 +8,7 @@ export default async function DashboardLayout({
   children: React.ReactNode
 }) {
   try {
-    const user = await getCurrentUser()
+    const user = await getSimpleUser()
 
     if (!user) {
       return (
