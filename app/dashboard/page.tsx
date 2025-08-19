@@ -36,12 +36,12 @@ export default async function DashboardPage() {
             <span className="font-medium">User Management</span>
             <span
               className={`px-2 py-1 rounded text-sm ${
-                hasPermission(user, PERMISSIONS.MANAGE_USERS)
+                hasPermission(user.role, PERMISSIONS.MANAGE_USERS)
                   ? "bg-green-100 text-green-800"
                   : "bg-red-100 text-red-800"
               }`}
             >
-              {hasPermission(user, PERMISSIONS.MANAGE_USERS) ? "Allowed" : "Denied"}
+              {hasPermission(user.role, PERMISSIONS.MANAGE_USERS) ? "Allowed" : "Denied"}
             </span>
           </div>
 
@@ -49,10 +49,12 @@ export default async function DashboardPage() {
             <span className="font-medium">View Claims (Admin/Office Only)</span>
             <span
               className={`px-2 py-1 rounded text-sm ${
-                hasPermission(user, PERMISSIONS.VIEW_CLAIMS) ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                hasPermission(user.role, PERMISSIONS.VIEW_CLAIMS)
+                  ? "bg-green-100 text-green-800"
+                  : "bg-red-100 text-red-800"
               }`}
             >
-              {hasPermission(user, PERMISSIONS.VIEW_CLAIMS) ? "Allowed" : "Denied"}
+              {hasPermission(user.role, PERMISSIONS.VIEW_CLAIMS) ? "Allowed" : "Denied"}
             </span>
           </div>
 
@@ -60,12 +62,12 @@ export default async function DashboardPage() {
             <span className="font-medium">Create Orders</span>
             <span
               className={`px-2 py-1 rounded text-sm ${
-                hasPermission(user, PERMISSIONS.CREATE_ORDERS)
+                hasPermission(user.role, PERMISSIONS.CREATE_ORDERS)
                   ? "bg-green-100 text-green-800"
                   : "bg-red-100 text-red-800"
               }`}
             >
-              {hasPermission(user, PERMISSIONS.CREATE_ORDERS) ? "Allowed" : "Denied"}
+              {hasPermission(user.role, PERMISSIONS.CREATE_ORDERS) ? "Allowed" : "Denied"}
             </span>
           </div>
 
@@ -73,12 +75,12 @@ export default async function DashboardPage() {
             <span className="font-medium">Handle Repairs</span>
             <span
               className={`px-2 py-1 rounded text-sm ${
-                hasPermission(user, PERMISSIONS.HANDLE_REPAIRS)
+                hasPermission(user.role, PERMISSIONS.HANDLE_REPAIRS)
                   ? "bg-green-100 text-green-800"
                   : "bg-red-100 text-red-800"
               }`}
             >
-              {hasPermission(user, PERMISSIONS.HANDLE_REPAIRS) ? "Allowed" : "Denied"}
+              {hasPermission(user.role, PERMISSIONS.HANDLE_REPAIRS) ? "Allowed" : "Denied"}
             </span>
           </div>
         </div>
