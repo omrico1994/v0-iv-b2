@@ -35,41 +35,34 @@ export async function getCurrentUser(): Promise<UserWithRole | null> {
     }
 
     try {
-      // Get user profile and role information in a single query
-      const { data: userData, error: userError } = await supabase
+      // First get user profile
+      const { data: userProfile, error: profileError } = await supabase
         .from("user_profiles")
-        .select(`
-          first_name,
-          last_name,
-          phone,
-          profile_photo_url,
-          business_setup_completed,
-          user_roles (
-            role,
-            retailer_id
-          )
-        `)
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .single()
+
+      if (profileError) {
+        if (profileError.message.includes("relation") || profileError.message.includes("does not exist")) {
+          throw new Error(`Database table 'user_profiles' does not exist. Please run the database setup scripts.`)
+        }
+        if (profileError.code === "PGRST116") {
+          return null
+        }
+        return null
+      }
+
+      // Get user role
+      const { data: userRole, error: roleError } = await supabase
+        .from("user_roles")
+        .select("*")
         .eq("user_id", user.id)
         .single()
 
-      if (userError) {
-        // If table doesn't exist, throw a more specific error
-        if (userError.message.includes("relation") || userError.message.includes("does not exist")) {
-          throw new Error(`Database table 'user_profiles' does not exist. Please run the database setup scripts.`)
-        }
-
-        if (userError.code === "PGRST116") {
-          return null
-        }
-
+      if (roleError || !userRole) {
         return null
       }
-
-      if (!userData || !userData.user_roles) {
-        return null
-      }
-
-      const userRole = userData.user_roles
 
       // Get user locations if they are a location_user
       let locations: Array<{ id: string; name: string; retailer_id: string }> = []
@@ -78,6 +71,7 @@ export async function getCurrentUser(): Promise<UserWithRole | null> {
         const { data: userLocations, error: locationError } = await supabase
           .from("user_location_memberships")
           .select(`
+            location_id,
             locations (
               id,
               name,
@@ -97,11 +91,11 @@ export async function getCurrentUser(): Promise<UserWithRole | null> {
         email: user.email!,
         role: userRole.role,
         retailer_id: userRole.retailer_id,
-        first_name: userData.first_name,
-        last_name: userData.last_name,
-        phone: userData.phone,
-        profile_photo_url: userData.profile_photo_url,
-        business_setup_completed: userData.business_setup_completed,
+        first_name: userProfile?.first_name,
+        last_name: userProfile?.last_name,
+        phone: userProfile?.phone,
+        profile_photo_url: userProfile?.profile_photo_url,
+        business_setup_completed: userProfile?.business_setup_completed,
         locations,
       }
     } catch (dbError) {
