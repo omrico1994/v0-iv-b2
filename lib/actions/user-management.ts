@@ -187,12 +187,15 @@ export async function createUser(prevState: any, formData: FormData) {
 
 export async function createUserFromAdmin(userData: AdminCreateUserData) {
   try {
+    console.log("[v0] Starting user creation with data:", userData)
+
     const supabase = createServiceClient()
     if (!supabase) {
       return { error: "Service client not configured" }
     }
 
     const currentUser = await getCurrentUser()
+    console.log("[v0] Current user:", currentUser?.email, currentUser?.role)
 
     // Check permissions
     if (!currentUser || !["admin", "office"].includes(currentUser.role)) {
@@ -201,6 +204,12 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
 
     // Validate required fields
     if (!userData.email || !userData.firstName || !userData.lastName || !userData.role) {
+      console.log("[v0] Missing required fields:", {
+        email: !!userData.email,
+        firstName: !!userData.firstName,
+        lastName: !!userData.lastName,
+        role: !!userData.role,
+      })
       return { error: "Missing required fields" }
     }
 
@@ -210,6 +219,7 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
       userData.businessType === "new" &&
       !userData.businessName
     ) {
+      console.log("[v0] Missing business name for new retailer")
       return { error: "Business name is required for new retailer" }
     }
 
@@ -218,16 +228,20 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
       userData.businessType === "existing" &&
       !userData.existingRetailerId
     ) {
+      console.log("[v0] Missing existing retailer ID")
       return { error: "Must select an existing retailer" }
     }
 
     // Check if user already exists
+    console.log("[v0] Checking if user exists:", userData.email)
     const { data: existingUser } = await supabase.auth.admin.getUserByEmail(userData.email)
     if (existingUser.user) {
+      console.log("[v0] User already exists")
       return { error: "User with this email already exists" }
     }
 
     // Create user in Supabase Auth
+    console.log("[v0] Creating auth user")
     const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
       email: userData.email,
       email_confirm: false, // They'll confirm via invitation
@@ -241,10 +255,13 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
     })
 
     if (authError || !authUser.user) {
+      console.log("[v0] Auth user creation failed:", authError)
       return { error: authError?.message || "Failed to create user account" }
     }
+    console.log("[v0] Auth user created:", authUser.user.id)
 
     // Create user profile
+    console.log("[v0] Creating user profile")
     const { error: profileError } = await supabase.from("user_profiles").insert({
       id: authUser.user.id,
       first_name: userData.firstName,
@@ -255,37 +272,50 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
     })
 
     if (profileError) {
+      console.log("[v0] Profile creation failed:", profileError)
       // Cleanup auth user if profile creation fails
       await supabase.auth.admin.deleteUser(authUser.user.id)
       return { error: "Failed to create user profile" }
     }
+    console.log("[v0] User profile created")
 
     // Handle retailer creation or assignment
     let retailerId = userData.existingRetailerId
     if ((userData.role === "retailer" || userData.role === "location_user") && userData.businessType === "new") {
+      console.log("[v0] Creating new retailer:", userData.businessName)
+
+      const uniqueName = `${userData.businessName!.toLowerCase().replace(/\s+/g, "")}_${Date.now()}`
+
+      const retailerData = {
+        name: uniqueName,
+        business_name: userData.businessName!,
+        full_address: userData.businessAddress || "",
+        business_phone: userData.businessPhone || "",
+        business_email: userData.businessEmail || userData.email,
+        website: userData.website || "",
+        contact_person: `${userData.firstName} ${userData.lastName}`,
+        created_by: currentUser.id,
+      }
+
+      console.log("[v0] Retailer data:", retailerData)
+
       const { data: retailer, error: retailerError } = await supabase
         .from("retailers")
-        .insert({
-          name: userData.businessName!.toLowerCase().replace(/\s+/g, ""),
-          business_name: userData.businessName!,
-          full_address: userData.businessAddress || "",
-          business_phone: userData.businessPhone || "",
-          business_email: userData.businessEmail || userData.email,
-          website: userData.website || "",
-          contact_person: `${userData.firstName} ${userData.lastName}`,
-          created_by: currentUser.id,
-        })
+        .insert(retailerData)
         .select("id")
         .single()
 
       if (retailerError || !retailer) {
+        console.log("[v0] Retailer creation failed:", retailerError)
         await supabase.auth.admin.deleteUser(authUser.user.id)
-        return { error: "Failed to create retailer business" }
+        return { error: `Failed to create retailer business: ${retailerError?.message || "Unknown error"}` }
       }
       retailerId = retailer.id
+      console.log("[v0] Retailer created:", retailerId)
     }
 
     // Create user role assignment
+    console.log("[v0] Creating user role assignment")
     const { error: roleError } = await supabase.from("user_roles").insert({
       user_id: authUser.user.id,
       role: userData.role,
@@ -293,9 +323,11 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
     })
 
     if (roleError) {
+      console.log("[v0] Role assignment failed:", roleError)
       await supabase.auth.admin.deleteUser(authUser.user.id)
       return { error: "Failed to assign user role" }
     }
+    console.log("[v0] User role assigned")
 
     // Create user invitation record
     const { error: invitationError } = await supabase.from("user_invitations").insert({
@@ -355,7 +387,7 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
       email: userData.email,
     }
   } catch (error) {
-    console.error("Error creating user:", error)
+    console.error("[v0] Error creating user:", error)
     return { error: "An unexpected error occurred" }
   }
 }
