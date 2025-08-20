@@ -522,32 +522,46 @@ export async function resetUserPassword(userId: string) {
 
 export async function resendInvitation(userId: string) {
   try {
+    console.log("[v0] Starting resend invitation for user:", userId)
+
     const supabase = createServiceClient()
     if (!supabase) {
+      console.log("[v0] Service client not configured")
       return { error: "Service client not configured" }
     }
 
     const currentUser = await getCurrentUser()
+    console.log("[v0] Current user:", currentUser?.email, currentUser?.role)
 
     if (!currentUser || !["admin", "office"].includes(currentUser.role)) {
+      console.log("[v0] Unauthorized user")
       return { error: "Unauthorized to resend invitations" }
     }
 
     // Get user details
+    console.log("[v0] Getting user details for:", userId)
     const { data: user, error: userError } = await supabase.auth.admin.getUserById(userId)
     if (userError || !user.user?.email) {
+      console.log("[v0] User not found:", userError)
       return { error: "User not found" }
     }
+    console.log("[v0] Found user email:", user.user.email)
 
     // Check if user has already accepted invitation
     const { data: profile, error: profileError } = await supabase
       .from("user_profiles")
-      .select("id")
+      .select("id, email_verified_at")
       .eq("id", userId)
       .single()
 
     if (profileError) {
+      console.log("[v0] Failed to check user status:", profileError)
       return { error: "Failed to check user status" }
+    }
+
+    if (profile.email_verified_at) {
+      console.log("[v0] User has already verified email")
+      return { error: "User has already completed account setup" }
     }
 
     // Send new invitation email
@@ -555,28 +569,48 @@ export async function resendInvitation(userId: string) {
       process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ||
       `${process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"}/auth/setup-account`
 
+    console.log("[v0] Sending invitation email to:", user.user.email, "with redirect:", redirectUrl)
+
     const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(user.user.email, {
       redirectTo: redirectUrl,
     })
 
     if (inviteError) {
-      return { error: "Failed to send invitation email" }
+      console.log("[v0] Failed to send invitation email:", {
+        message: inviteError.message,
+        details: inviteError.details,
+        hint: inviteError.hint,
+        code: inviteError.code,
+      })
+      return { error: `Failed to send invitation email: ${inviteError.message}` }
     }
+    console.log("[v0] Invitation email sent successfully")
+
+    const { data: currentInvitation, error: getInvitationError } = await supabase
+      .from("user_invitations")
+      .select("resent_count")
+      .eq("email", user.user.email)
+      .single()
+
+    const currentResentCount = currentInvitation?.resent_count || 0
+    console.log("[v0] Current resent count:", currentResentCount)
 
     const { error: updateError } = await supabase
       .from("user_invitations")
       .update({
         status: "sent",
         sent_at: new Date().toISOString(),
-        resent_count: supabase.raw("COALESCE(resent_count, 0) + 1"),
+        resent_count: currentResentCount + 1,
         created_at: new Date().toISOString(), // Update timestamp to track resend
         expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now
       })
       .eq("email", user.user.email)
 
     if (updateError) {
-      console.error("Failed to update invitation record:", updateError)
+      console.log("[v0] Failed to update invitation record:", updateError)
       // Don't fail the operation for this
+    } else {
+      console.log("[v0] Updated invitation record successfully")
     }
 
     // Log audit trail
@@ -588,9 +622,10 @@ export async function resendInvitation(userId: string) {
       new_data: { action: "invitation_resent", email: user.user.email },
     })
 
+    console.log("[v0] Resend invitation completed successfully")
     return { success: "Invitation resent successfully" }
   } catch (error) {
-    console.error("Error resending invitation:", error)
+    console.error("[v0] Error resending invitation:", error)
     return { error: "An unexpected error occurred" }
   }
 }
