@@ -22,19 +22,110 @@ export function AccountSetupForm() {
   const searchParams = useSearchParams()
 
   useEffect(() => {
-    const type = searchParams.get("type")
-    const accessToken = searchParams.get("access_token")
-    const refreshToken = searchParams.get("refresh_token")
+    const extractTokensFromUrl = () => {
+      console.log("[v0] === COMPREHENSIVE URL DEBUG ===")
+      console.log("[v0] Full URL:", window.location.href)
+      console.log("[v0] Pathname:", window.location.pathname)
+      console.log("[v0] Search params:", window.location.search)
+      console.log("[v0] Hash:", window.location.hash)
+      console.log("[v0] Host:", window.location.host)
+
+      const urlSearchParams = new URLSearchParams(window.location.search)
+      console.log("[v0] All search params:")
+      for (const [key, value] of urlSearchParams.entries()) {
+        console.log(`[v0]   ${key}: ${value}`)
+      }
+
+      const hash = window.location.hash.substring(1)
+      const hashParams = new URLSearchParams(hash)
+      console.log("[v0] All hash params:")
+      for (const [key, value] of hashParams.entries()) {
+        console.log(`[v0]   ${key}: ${value}`)
+      }
+
+      let type = searchParams.get("type")
+      let accessToken = searchParams.get("access_token")
+      let refreshToken = searchParams.get("refresh_token")
+
+      console.log(
+        "[v0] From search params - type:",
+        type,
+        "access_token:",
+        !!accessToken,
+        "refresh_token:",
+        !!refreshToken,
+      )
+
+      if (!accessToken || !refreshToken) {
+        type = type || hashParams.get("type")
+        accessToken = accessToken || hashParams.get("access_token")
+        refreshToken = refreshToken || hashParams.get("refresh_token")
+
+        console.log("[v0] From hash - type:", type, "access_token:", !!accessToken, "refresh_token:", !!refreshToken)
+
+        if (!accessToken) {
+          accessToken =
+            hashParams.get("token") ||
+            hashParams.get("access-token") ||
+            hashParams.get("accessToken") ||
+            hashParams.get("auth_token") ||
+            hashParams.get("authToken")
+        }
+        if (!refreshToken) {
+          refreshToken =
+            hashParams.get("refresh-token") ||
+            hashParams.get("refreshToken") ||
+            hashParams.get("refresh_token") ||
+            hashParams.get("rt")
+        }
+
+        console.log("[v0] After alternative names - access_token:", !!accessToken, "refresh_token:", !!refreshToken)
+      }
+
+      const supabase = createClient()
+      supabase.auth.getSession().then(({ data: { session }, error }) => {
+        console.log("[v0] Current Supabase session:", !!session, "error:", error)
+        if (session) {
+          console.log("[v0] Session user:", session.user?.email)
+          console.log("[v0] Session expires at:", session.expires_at)
+        }
+      })
+
+      return { type, accessToken, refreshToken }
+    }
+
+    const { type, accessToken, refreshToken } = extractTokensFromUrl()
 
     console.log("[v0] Setup form params:", { type, hasAccessToken: !!accessToken, hasRefreshToken: !!refreshToken })
 
-    if (type === "recovery" && accessToken && refreshToken) {
-      setIsPasswordReset(true)
-      // Set the session from URL parameters
-      const supabase = createClient()
-      supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken,
+    const supabase = createClient()
+
+    if ((type === "recovery" || type === "signup" || accessToken) && accessToken && refreshToken) {
+      setIsPasswordReset(type === "recovery")
+      supabase.auth
+        .setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        })
+        .then(({ error }) => {
+          if (error) {
+            console.log("[v0] Session set error:", error)
+            setError("Failed to authenticate. Please try clicking the reset link again.")
+          } else {
+            console.log("[v0] Session set successfully for", type === "recovery" ? "password reset" : "invitation")
+            setError(null)
+          }
+        })
+    } else {
+      supabase.auth.getSession().then(({ data: { session }, error }) => {
+        if (session && session.user) {
+          console.log("[v0] Found existing session for user:", session.user.email)
+          setIsPasswordReset(true)
+          setError(null)
+        } else {
+          console.log("[v0] No valid tokens found and no existing session")
+          setError("Auth session missing!")
+        }
       })
     }
   }, [searchParams])
@@ -59,7 +150,6 @@ export function AccountSetupForm() {
         console.log("[v0] Attempting password update, isPasswordReset:", isPasswordReset)
 
         if (isPasswordReset) {
-          // For password reset flow, update the password
           const { error: updateError } = await supabase.auth.updateUser({
             password: password,
           })
@@ -72,7 +162,6 @@ export function AccountSetupForm() {
 
           console.log("[v0] Password reset successful")
         } else {
-          // For invitation flow, update the password
           const { error: updateError } = await supabase.auth.updateUser({
             password: password,
           })
@@ -102,7 +191,6 @@ export function AccountSetupForm() {
             console.log("[v0] Profile update error:", profileError)
           }
 
-          // Update invitation status if this was from an invitation
           if (!isPasswordReset) {
             const { error: invitationError } = await supabase
               .from("user_invitations")
@@ -118,7 +206,6 @@ export function AccountSetupForm() {
           }
         }
 
-        // Redirect to dashboard
         router.push("/dashboard")
       } catch (error) {
         console.log("[v0] Setup error:", error)
