@@ -566,6 +566,9 @@ export async function resendInvitation(userId: string) {
     const { error: updateError } = await supabase
       .from("user_invitations")
       .update({
+        status: "sent",
+        sent_at: new Date().toISOString(),
+        resent_count: supabase.raw("COALESCE(resent_count, 0) + 1"),
         created_at: new Date().toISOString(), // Update timestamp to track resend
         expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now
       })
