@@ -53,12 +53,14 @@ export async function getAllUsers(filters?: {
   try {
     const supabase = createServiceClient()
     if (!supabase) {
+      console.log("[v0] Service client not configured")
       return { error: "Service client not configured" }
     }
 
     const currentUser = await getCurrentUser()
 
     if (!currentUser || !["admin", "office"].includes(currentUser.role)) {
+      console.log("[v0] Unauthorized user:", currentUser?.role)
       return { error: "Unauthorized to view users" }
     }
 
@@ -74,29 +76,7 @@ export async function getAllUsers(filters?: {
 
     console.log("[v0] Found auth users:", authUsers.users.length)
 
-    let profileQuery = supabase.from("user_profiles").select(`
-        *,
-        user_roles!user_roles_user_id_fkey (
-          role,
-          retailer_id,
-          retailers (
-            id,
-            name,
-            business_name
-          )
-        ),
-        user_location_memberships!user_location_memberships_user_id_fkey (
-          location_id,
-          is_active,
-          locations (
-            id,
-            name,
-            retailers (
-              business_name
-            )
-          )
-        )
-      `)
+    let profileQuery = supabase.from("user_profiles").select("*")
 
     // Apply filters
     if (filters?.status === "active") {
@@ -108,11 +88,48 @@ export async function getAllUsers(filters?: {
     const { data: profiles, error: profileError } = await profileQuery
 
     if (profileError) {
-      console.log("[v0] Profile error:", profileError)
+      console.log("[v0] Profile error details:", {
+        message: profileError.message,
+        details: profileError.details,
+        hint: profileError.hint,
+        code: profileError.code,
+      })
       return { error: "Failed to fetch user profiles" }
     }
 
     console.log("[v0] Found profiles:", profiles?.length || 0)
+
+    const { data: userRoles, error: rolesError } = await supabase
+      .from("user_roles")
+      .select("user_id, role, retailer_id")
+
+    if (rolesError) {
+      console.log("[v0] Roles error:", rolesError)
+    }
+
+    const { data: retailers, error: retailersError } = await supabase
+      .from("retailers")
+      .select("id, name, business_name")
+
+    if (retailersError) {
+      console.log("[v0] Retailers error:", retailersError)
+    }
+
+    const { data: locationMemberships, error: locationsError } = await supabase
+      .from("user_location_memberships")
+      .select("user_id, location_id, is_active")
+
+    if (locationsError) {
+      console.log("[v0] Locations error:", locationsError)
+    }
+
+    const { data: locations, error: locationsDataError } = await supabase
+      .from("locations")
+      .select("id, name, retailer_id")
+
+    if (locationsDataError) {
+      console.log("[v0] Locations data error:", locationsDataError)
+    }
 
     const { data: invitations } = await supabase.from("user_invitations").select("*")
 
@@ -121,6 +138,41 @@ export async function getAllUsers(filters?: {
     const users: UserWithDetails[] = authUsers.users.map((authUser) => {
       const profile = profiles?.find((p) => p.user_id === authUser.id)
       const userInvitations = invitations?.filter((inv) => inv.email === authUser.email) || []
+
+      // Get user roles and combine with retailer data
+      const userRoleRecords = userRoles?.filter((r) => r.user_id === authUser.id) || []
+      const combinedRoles = userRoleRecords.map((role) => {
+        const retailer = retailers?.find((r) => r.id === role.retailer_id)
+        return {
+          role: role.role,
+          retailer_id: role.retailer_id,
+          retailers: retailer
+            ? {
+                id: retailer.id,
+                name: retailer.name,
+                business_name: retailer.business_name,
+              }
+            : undefined,
+        }
+      })
+
+      // Get user location memberships and combine with location data
+      const userLocationRecords = locationMemberships?.filter((l) => l.user_id === authUser.id) || []
+      const combinedLocations = userLocationRecords.map((membership) => {
+        const location = locations?.find((l) => l.id === membership.location_id)
+        const locationRetailer = retailers?.find((r) => r.id === location?.retailer_id)
+        return {
+          location_id: membership.location_id,
+          is_active: membership.is_active,
+          locations: {
+            id: location?.id || membership.location_id,
+            name: location?.name || "Unknown Location",
+            retailers: {
+              business_name: locationRetailer?.business_name || "Unknown Business",
+            },
+          },
+        }
+      })
 
       // Include user even if no profile exists yet
       return {
@@ -136,8 +188,8 @@ export async function getAllUsers(filters?: {
           business_setup_completed: false,
           created_at: authUser.created_at,
         },
-        user_roles: profile?.user_roles || [],
-        user_location_memberships: profile?.user_location_memberships || [],
+        user_roles: combinedRoles,
+        user_location_memberships: combinedLocations,
         user_invitations:
           userInvitations.length > 0
             ? userInvitations.map((inv) => ({
