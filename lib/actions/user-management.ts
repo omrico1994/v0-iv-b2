@@ -191,6 +191,7 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
 
     const supabase = createServiceClient()
     if (!supabase) {
+      console.log("[v0] Service client not configured")
       return { error: "Service client not configured" }
     }
 
@@ -199,6 +200,7 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
 
     // Check permissions
     if (!currentUser || !["admin", "office"].includes(currentUser.role)) {
+      console.log("[v0] Unauthorized user")
       return { error: "Unauthorized to create users" }
     }
 
@@ -275,7 +277,7 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
       console.log("[v0] Profile creation failed:", profileError)
       // Cleanup auth user if profile creation fails
       await supabase.auth.admin.deleteUser(authUser.user.id)
-      return { error: "Failed to create user profile" }
+      return { error: `Failed to create user profile: ${profileError.message}` }
     }
     console.log("[v0] User profile created")
 
@@ -300,7 +302,7 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
         created_by: currentUser.id,
       }
 
-      console.log("[v0] Retailer data:", retailerData)
+      console.log("[v0] Retailer data to insert:", retailerData)
 
       const { data: retailer, error: retailerError } = await supabase
         .from("retailers")
@@ -308,13 +310,25 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
         .select("id")
         .single()
 
-      if (retailerError || !retailer) {
-        console.log("[v0] Retailer creation failed:", retailerError)
+      if (retailerError) {
+        console.log("[v0] Retailer creation failed with detailed error:", {
+          message: retailerError.message,
+          details: retailerError.details,
+          hint: retailerError.hint,
+          code: retailerError.code,
+        })
         await supabase.auth.admin.deleteUser(authUser.user.id)
-        return { error: `Failed to create retailer business: ${retailerError?.message || "Unknown error"}` }
+        return { error: `Failed to create retailer: ${retailerError.message} (Code: ${retailerError.code})` }
       }
+
+      if (!retailer) {
+        console.log("[v0] Retailer creation returned no data")
+        await supabase.auth.admin.deleteUser(authUser.user.id)
+        return { error: "Failed to create retailer business: No data returned" }
+      }
+
       retailerId = retailer.id
-      console.log("[v0] Retailer created:", retailerId)
+      console.log("[v0] Retailer created successfully:", retailerId)
     }
 
     // Create user role assignment
@@ -328,7 +342,7 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
     if (roleError) {
       console.log("[v0] Role assignment failed:", roleError)
       await supabase.auth.admin.deleteUser(authUser.user.id)
-      return { error: "Failed to assign user role" }
+      return { error: `Failed to assign user role: ${roleError.message}` }
     }
     console.log("[v0] User role assigned")
 
@@ -390,7 +404,10 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
       email: userData.email,
     }
   } catch (error) {
-    console.error("[v0] Error creating user:", error)
+    console.error("[v0] Unexpected error in createUserFromAdmin:", error)
+    if (error instanceof Error) {
+      return { error: `Unexpected error: ${error.message}` }
+    }
     return { error: "An unexpected error occurred" }
   }
 }
