@@ -133,8 +133,11 @@ export function UserCreationForm() {
   const handleSubmit = () => {
     if (!formData.role) return
 
+    console.log("[v0] Form submission started with data:", formData)
+
     startTransition(async () => {
       try {
+        console.log("[v0] Calling createUserFromAdmin server action...")
         const result = await createUserFromAdmin({
           role: formData.role!,
           email: formData.email,
@@ -151,6 +154,7 @@ export function UserCreationForm() {
           invitationMessage: formData.invitationMessage,
         })
 
+        console.log("[v0] Server action result:", result)
         setResult(result)
 
         if (result.success) {
@@ -177,7 +181,8 @@ export function UserCreationForm() {
           }, 3000)
         }
       } catch (error) {
-        setResult({ error: "An unexpected error occurred" })
+        console.error("[v0] Client-side error in handleSubmit:", error)
+        setResult({ error: `Error: ${error instanceof Error ? error.message : "An unexpected error occurred"}` })
       }
     })
   }
