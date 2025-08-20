@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, Loader2 } from "lucide-react"
+import { AlertCircle, Loader2, Mail } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter, useSearchParams } from "next/navigation"
 
@@ -18,6 +18,8 @@ export function AccountSetupForm() {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [isPasswordReset, setIsPasswordReset] = useState(false)
+  const [isLinkExpired, setIsLinkExpired] = useState(false)
+  const [userEmail, setUserEmail] = useState<string | null>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -41,6 +43,16 @@ export function AccountSetupForm() {
       console.log("[v0] All hash params:")
       for (const [key, value] of hashParams.entries()) {
         console.log(`[v0]   ${key}: ${value}`)
+      }
+
+      const errorCode = urlSearchParams.get("error_code") || hashParams.get("error_code")
+      const errorDescription = urlSearchParams.get("error_description") || hashParams.get("error_description")
+
+      if (errorCode === "otp_expired" || errorDescription?.includes("expired")) {
+        console.log("[v0] Detected expired reset link")
+        setIsLinkExpired(true)
+        setError("This reset link has expired. Please request a new one.")
+        return { type: null, accessToken: null, refreshToken: null }
       }
 
       let type = searchParams.get("type")
@@ -82,26 +94,48 @@ export function AccountSetupForm() {
         console.log("[v0] After alternative names - access_token:", !!accessToken, "refresh_token:", !!refreshToken)
       }
 
-      const supabase = createClient()
-      supabase.auth.getSession().then(({ data: { session }, error }) => {
-        console.log("[v0] Current Supabase session:", !!session, "error:", error)
-        if (session) {
-          console.log("[v0] Session user:", session.user?.email)
-          console.log("[v0] Session expires at:", session.expires_at)
-        }
-      })
-
       return { type, accessToken, refreshToken }
     }
 
     const { type, accessToken, refreshToken } = extractTokensFromUrl()
 
+    if (isLinkExpired) {
+      return
+    }
+
     console.log("[v0] Setup form params:", { type, hasAccessToken: !!accessToken, hasRefreshToken: !!refreshToken })
 
     const supabase = createClient()
 
-    if ((type === "recovery" || type === "signup" || accessToken) && accessToken && refreshToken) {
-      setIsPasswordReset(type === "recovery")
+    if (type === "recovery" && accessToken) {
+      console.log("[v0] Handling password reset flow with access token only")
+      setIsPasswordReset(true)
+
+      // For password reset, we can verify the token by trying to get the user
+      supabase.auth.getUser(accessToken).then(({ data: { user }, error }) => {
+        if (error || !user) {
+          console.log("[v0] Invalid recovery token:", error)
+          setError("Invalid or expired reset link. Please request a new one.")
+        } else {
+          console.log("[v0] Valid recovery token for user:", user.email)
+          setUserEmail(user.email)
+          setError(null)
+
+          // Set a temporary session for password update
+          supabase.auth
+            .setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken || "temp-refresh-token", // Provide fallback
+            })
+            .catch((err) => {
+              console.log("[v0] Session set warning (expected for recovery):", err)
+              // This might fail but that's ok for password reset flows
+            })
+        }
+      })
+    } else if ((type === "signup" || type === "invite") && accessToken && refreshToken) {
+      // Handle invitation flows that have both tokens
+      setIsPasswordReset(false)
       supabase.auth
         .setSession({
           access_token: accessToken,
@@ -110,25 +144,65 @@ export function AccountSetupForm() {
         .then(({ error }) => {
           if (error) {
             console.log("[v0] Session set error:", error)
-            setError("Failed to authenticate. Please try clicking the reset link again.")
+            setError("Failed to authenticate. Please try clicking the invitation link again.")
           } else {
-            console.log("[v0] Session set successfully for", type === "recovery" ? "password reset" : "invitation")
+            console.log("[v0] Session set successfully for invitation")
             setError(null)
           }
         })
+        .catch((err) => {
+          console.log("[v0] Session set catch error:", err)
+          setError("Failed to authenticate. Please try again.")
+        })
     } else {
-      supabase.auth.getSession().then(({ data: { session }, error }) => {
-        if (session && session.user) {
-          console.log("[v0] Found existing session for user:", session.user.email)
-          setIsPasswordReset(true)
-          setError(null)
-        } else {
-          console.log("[v0] No valid tokens found and no existing session")
-          setError("Auth session missing!")
-        }
-      })
+      // Check for existing session
+      supabase.auth
+        .getSession()
+        .then(({ data: { session }, error }) => {
+          if (session && session.user) {
+            console.log("[v0] Found existing session for user:", session.user.email)
+            setIsPasswordReset(true)
+            setUserEmail(session.user.email)
+            setError(null)
+          } else {
+            console.log("[v0] No valid tokens found and no existing session")
+            setError("Auth session missing!")
+          }
+        })
+        .catch((err) => {
+          console.log("[v0] Get session error:", err)
+          setError("Failed to check authentication status.")
+        })
     }
-  }, [searchParams])
+  }, [searchParams, isLinkExpired])
+
+  const handleRequestNewLink = () => {
+    startTransition(async () => {
+      try {
+        const supabase = createClient()
+        const email = userEmail || prompt("Please enter your email address:")
+
+        if (!email) {
+          setError("Email address is required to send a new reset link.")
+          return
+        }
+
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/auth/setup-account`,
+        })
+
+        if (error) {
+          setError(`Failed to send reset email: ${error.message}`)
+        } else {
+          setError(null)
+          alert("A new password reset link has been sent to your email.")
+        }
+      } catch (error) {
+        console.log("[v0] Request new link error:", error)
+        setError("Failed to send new reset link. Please try again.")
+      }
+    })
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -149,31 +223,36 @@ export function AccountSetupForm() {
 
         console.log("[v0] Attempting password update, isPasswordReset:", isPasswordReset)
 
-        if (isPasswordReset) {
-          const { error: updateError } = await supabase.auth.updateUser({
-            password: password,
-          })
+        let updateError
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
 
-          if (updateError) {
-            console.log("[v0] Password reset error:", updateError)
-            setError(updateError.message)
-            return
+        if (!session && isPasswordReset) {
+          // Extract token again for password update
+          const urlSearchParams = new URLSearchParams(window.location.search)
+          const hashParams = new URLSearchParams(window.location.hash.substring(1))
+          const accessToken = urlSearchParams.get("access_token") || hashParams.get("access_token")
+
+          if (accessToken) {
+            console.log("[v0] Using access token for password update")
+            const response = await supabase.auth.updateUser({ password }, { accessToken })
+            updateError = response.error
+          } else {
+            updateError = new Error("No access token available for password reset")
           }
-
-          console.log("[v0] Password reset successful")
         } else {
-          const { error: updateError } = await supabase.auth.updateUser({
-            password: password,
-          })
-
-          if (updateError) {
-            console.log("[v0] Invitation setup error:", updateError)
-            setError(updateError.message)
-            return
-          }
-
-          console.log("[v0] Invitation setup successful")
+          const response = await supabase.auth.updateUser({ password })
+          updateError = response.error
         }
+
+        if (updateError) {
+          console.log("[v0] Password update error:", updateError)
+          setError(updateError.message)
+          return
+        }
+
+        console.log("[v0] Password update successful")
 
         const {
           data: { user },
@@ -212,6 +291,44 @@ export function AccountSetupForm() {
         setError("An unexpected error occurred")
       }
     })
+  }
+
+  if (isLinkExpired) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Mail className="h-5 w-5" />
+            Reset Link Expired
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Alert className="border-amber-200 bg-amber-50">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              This password reset link has expired. Password reset links are only valid for a limited time for security
+              reasons.
+            </AlertDescription>
+          </Alert>
+
+          <div className="text-center space-y-4">
+            <p className="text-sm text-muted-foreground">To reset your password, please request a new reset link.</p>
+
+            <Button onClick={handleRequestNewLink} disabled={isPending} className="w-full">
+              {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Send New Reset Link
+            </Button>
+
+            {error && (
+              <Alert className="border-destructive bg-destructive/10">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-destructive">{error}</AlertDescription>
+              </Alert>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
