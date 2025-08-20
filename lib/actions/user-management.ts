@@ -294,6 +294,9 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
         business_email: userData.businessEmail || userData.email,
         website: userData.website || "",
         contact_person: `${userData.firstName} ${userData.lastName}`,
+        tax_id: "", // Empty for now, can be filled later
+        setup_completed: false, // Will be completed during business setup
+        is_active: true, // New retailers are active by default
         created_by: currentUser.id,
       }
 

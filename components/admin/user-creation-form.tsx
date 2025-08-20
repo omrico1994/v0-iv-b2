@@ -97,14 +97,9 @@ export function UserCreationForm() {
   }
 
   const handleNext = () => {
-    console.log("[v0] Next button clicked, current step:", currentStep)
-    console.log("[v0] Form data:", formData)
-    console.log("[v0] Can proceed:", canProceed())
-
     const stepOrder: Step[] = ["role", "details", "business", "review"]
     const currentIndex = stepOrder.indexOf(currentStep)
     if (currentIndex < stepOrder.length - 1) {
-      console.log("[v0] Moving to next step:", stepOrder[currentIndex + 1])
       setCurrentStep(stepOrder[currentIndex + 1])
     }
   }
@@ -118,45 +113,19 @@ export function UserCreationForm() {
   }
 
   const canProceed = () => {
-    console.log("[v0] Checking canProceed for step:", currentStep)
-    console.log("[v0] Current form data:", {
-      role: formData.role,
-      email: formData.email,
-      firstName: formData.firstName,
-      lastName: formData.lastName,
-      businessType: formData.businessType,
-      existingRetailerId: formData.existingRetailerId,
-      businessName: formData.businessName,
-    })
-
     switch (currentStep) {
       case "role":
-        const roleResult = !!formData.role
-        console.log("[v0] Role step canProceed:", roleResult)
-        return roleResult
+        return !!formData.role
       case "details":
-        const detailsResult = formData.email && formData.firstName && formData.lastName
-        console.log("[v0] Details step canProceed:", detailsResult, {
-          email: !!formData.email,
-          firstName: !!formData.firstName,
-          lastName: !!formData.lastName,
-        })
-        return detailsResult
+        return formData.email && formData.firstName && formData.lastName
       case "business":
-        if (formData.role === "admin" || formData.role === "office") {
-          console.log("[v0] Business step canProceed (admin/office):", true)
-          return true
-        }
-        const businessResult =
-          formData.businessType === "existing"
-            ? !!formData.existingRetailerId
-            : formData.businessType === "new"
-              ? !!formData.businessName
-              : false
-        console.log("[v0] Business step canProceed:", businessResult)
-        return businessResult
+        if (formData.role === "admin" || formData.role === "office") return true
+        return formData.businessType === "existing"
+          ? !!formData.existingRetailerId
+          : formData.businessType === "new"
+            ? !!formData.businessName
+            : false
       default:
-        console.log("[v0] Default canProceed:", true)
         return true
     }
   }
