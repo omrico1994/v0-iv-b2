@@ -70,9 +70,13 @@ export async function createUser(prevState: any, formData: FormData) {
       return { error: "Location users must be assigned to retailer and locations" }
     }
 
-    // Check if user already exists
-    const { data: existingUser } = await supabase.auth.admin.getUserByEmail(userData.email)
-    if (existingUser.user) {
+    const { data: usersList, error: listError } = await supabase.auth.admin.listUsers()
+    if (listError) {
+      return { error: "Failed to check existing users" }
+    }
+
+    const existingUser = usersList.users.find((user) => user.email === userData.email)
+    if (existingUser) {
       return { error: "User with this email already exists" }
     }
 
@@ -236,8 +240,14 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
 
     // Check if user already exists
     console.log("[v0] Checking if user exists:", userData.email)
-    const { data: existingUser } = await supabase.auth.admin.getUserByEmail(userData.email)
-    if (existingUser.user) {
+    const { data: usersList, error: listError } = await supabase.auth.admin.listUsers()
+    if (listError) {
+      console.log("[v0] Error checking existing users:", listError)
+      return { error: "Failed to check existing users" }
+    }
+
+    const existingUser = usersList.users.find((user) => user.email === userData.email)
+    if (existingUser) {
       console.log("[v0] User already exists")
       return { error: "User with this email already exists" }
     }
