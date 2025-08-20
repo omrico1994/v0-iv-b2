@@ -159,8 +159,14 @@ export async function createUser(prevState: any, formData: FormData) {
     }
 
     // Send invitation email
+    const redirectUrl =
+      process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ||
+      (typeof window !== "undefined"
+        ? `${window.location.origin}/auth/setup-account`
+        : `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/auth/setup-account`)
+
     const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(userData.email, {
-      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/setup-account`,
+      redirectTo: redirectUrl,
     })
 
     if (inviteError) {
@@ -374,8 +380,12 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
     }
 
     // Send invitation email
+    const redirectUrl =
+      process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ||
+      `${process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"}/auth/setup-account`
+
     const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(userData.email, {
-      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/auth/setup-account`,
+      redirectTo: redirectUrl,
     })
 
     if (inviteError) {
@@ -482,8 +492,12 @@ export async function resetUserPassword(userId: string) {
     }
 
     // Send password reset email
+    const resetRedirectUrl =
+      process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ||
+      `${process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"}/auth/reset-password`
+
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(user.user.email, {
-      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/reset-password`,
+      redirectTo: resetRedirectUrl,
     })
 
     if (resetError) {
