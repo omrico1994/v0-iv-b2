@@ -519,3 +519,77 @@ export async function resetUserPassword(userId: string) {
     return { error: "An unexpected error occurred" }
   }
 }
+
+export async function resendInvitation(userId: string) {
+  try {
+    const supabase = createServiceClient()
+    if (!supabase) {
+      return { error: "Service client not configured" }
+    }
+
+    const currentUser = await getCurrentUser()
+
+    if (!currentUser || !["admin", "office"].includes(currentUser.role)) {
+      return { error: "Unauthorized to resend invitations" }
+    }
+
+    // Get user details
+    const { data: user, error: userError } = await supabase.auth.admin.getUserById(userId)
+    if (userError || !user.user?.email) {
+      return { error: "User not found" }
+    }
+
+    // Check if user has already accepted invitation
+    const { data: profile, error: profileError } = await supabase
+      .from("user_profiles")
+      .select("id")
+      .eq("id", userId)
+      .single()
+
+    if (profileError) {
+      return { error: "Failed to check user status" }
+    }
+
+    // Send new invitation email
+    const redirectUrl =
+      process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ||
+      `${process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"}/auth/setup-account`
+
+    const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(user.user.email, {
+      redirectTo: redirectUrl,
+    })
+
+    if (inviteError) {
+      return { error: "Failed to send invitation email" }
+    }
+
+    // Update invitation record
+    const { error: updateError } = await supabase
+      .from("user_invitations")
+      .update({
+        status: "sent",
+        sent_at: new Date().toISOString(),
+        resent_count: supabase.raw("COALESCE(resent_count, 0) + 1"),
+      })
+      .eq("user_id", userId)
+
+    if (updateError) {
+      console.error("Failed to update invitation record:", updateError)
+      // Don't fail the operation for this
+    }
+
+    // Log audit trail
+    await supabase.from("audit_logs").insert({
+      user_id: currentUser.id,
+      action: "RESEND_INVITATION",
+      table_name: "user_invitations",
+      record_id: userId,
+      new_data: { action: "invitation_resent", email: user.user.email },
+    })
+
+    return { success: "Invitation resent successfully" }
+  } catch (error) {
+    console.error("Error resending invitation:", error)
+    return { error: "An unexpected error occurred" }
+  }
+}

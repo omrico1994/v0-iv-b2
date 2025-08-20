@@ -28,6 +28,7 @@ import {
   Loader2,
   Plus,
   History,
+  Send,
 } from "lucide-react"
 import {
   getAllUsers,
@@ -38,7 +39,7 @@ import {
   type UserWithDetails,
 } from "@/lib/actions/user-dashboard"
 import { getRetailers } from "@/lib/actions/location-management"
-import { resetUserPassword } from "@/lib/actions/user-management"
+import { resetUserPassword, resendInvitation } from "@/lib/actions/user-management"
 import Link from "next/link"
 
 interface Retailer {
@@ -138,6 +139,17 @@ export function UserManagementDashboard() {
     startTransition(async () => {
       try {
         const result = await resetUserPassword(userId)
+        setResult(result)
+      } catch (error) {
+        setResult({ error: "An unexpected error occurred" })
+      }
+    })
+  }
+
+  const handleResendInvitation = (userId: string) => {
+    startTransition(async () => {
+      try {
+        const result = await resendInvitation(userId)
         setResult(result)
       } catch (error) {
         setResult({ error: "An unexpected error occurred" })
@@ -450,6 +462,17 @@ export function UserManagementDashboard() {
                             <ToggleLeft className="w-4 h-4 text-muted-foreground" />
                           )}
                         </Button>
+                        {invitationStatus !== "Completed" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleResendInvitation(user.id)}
+                            disabled={isPending}
+                            title="Resend invitation"
+                          >
+                            <Send className="w-4 h-4" />
+                          </Button>
+                        )}
                         <Button variant="outline" size="sm" onClick={() => openAuditDialog(user)}>
                           <History className="w-4 h-4" />
                         </Button>
