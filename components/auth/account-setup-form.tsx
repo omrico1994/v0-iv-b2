@@ -108,31 +108,10 @@ export function AccountSetupForm() {
     const supabase = createClient()
 
     if (type === "recovery" && accessToken) {
-      console.log("[v0] Handling password reset flow with access token only")
+      console.log("[v0] Handling password reset flow - token will be validated during password update")
       setIsPasswordReset(true)
-
-      // For password reset, we can verify the token by trying to get the user
-      supabase.auth.getUser(accessToken).then(({ data: { user }, error }) => {
-        if (error || !user) {
-          console.log("[v0] Invalid recovery token:", error)
-          setError("Invalid or expired reset link. Please request a new one.")
-        } else {
-          console.log("[v0] Valid recovery token for user:", user.email)
-          setUserEmail(user.email)
-          setError(null)
-
-          // Set a temporary session for password update
-          supabase.auth
-            .setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken || "temp-refresh-token", // Provide fallback
-            })
-            .catch((err) => {
-              console.log("[v0] Session set warning (expected for recovery):", err)
-              // This might fail but that's ok for password reset flows
-            })
-        }
-      })
+      setError(null)
+      // Don't try to validate the recovery token here, it will be used directly in updateUser
     } else if ((type === "signup" || type === "invite") && accessToken && refreshToken) {
       // Handle invitation flows that have both tokens
       setIsPasswordReset(false)
@@ -235,9 +214,20 @@ export function AccountSetupForm() {
           const accessToken = urlSearchParams.get("access_token") || hashParams.get("access_token")
 
           if (accessToken) {
-            console.log("[v0] Using access token for password update")
+            console.log("[v0] Using recovery token for password update")
             const response = await supabase.auth.updateUser({ password }, { accessToken })
             updateError = response.error
+
+            if (!updateError) {
+              console.log("[v0] Password reset successful, user should now be logged in")
+              // After successful password reset, get the new session
+              const {
+                data: { session: newSession },
+              } = await supabase.auth.getSession()
+              if (newSession?.user) {
+                setUserEmail(newSession.user.email)
+              }
+            }
           } else {
             updateError = new Error("No access token available for password reset")
           }
