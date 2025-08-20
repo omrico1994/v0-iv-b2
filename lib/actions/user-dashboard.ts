@@ -62,12 +62,17 @@ export async function getAllUsers(filters?: {
       return { error: "Unauthorized to view users" }
     }
 
+    console.log("[v0] Fetching all users...")
+
     // Get all users from Supabase Auth
     const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers()
 
     if (authError) {
+      console.log("[v0] Auth error:", authError)
       return { error: "Failed to fetch users from auth" }
     }
+
+    console.log("[v0] Found auth users:", authUsers.users.length)
 
     // Get user profiles and roles
     let profileQuery = supabase.from("user_profiles").select(`
@@ -109,27 +114,42 @@ export async function getAllUsers(filters?: {
     const { data: profiles, error: profileError } = await profileQuery
 
     if (profileError) {
+      console.log("[v0] Profile error:", profileError)
       return { error: "Failed to fetch user profiles" }
     }
 
-    // Combine auth users with profiles
-    const users: UserWithDetails[] = authUsers.users
-      .map((authUser) => {
-        const profile = profiles?.find((p) => p.id === authUser.id)
-        if (!profile) return null
+    console.log("[v0] Found profiles:", profiles?.length || 0)
 
-        return {
-          id: authUser.id,
-          email: authUser.email || "",
+    const users: UserWithDetails[] = authUsers.users.map((authUser) => {
+      const profile = profiles?.find((p) => p.id === authUser.id)
+
+      // Include user even if no profile exists yet
+      return {
+        id: authUser.id,
+        email: authUser.email || "",
+        created_at: authUser.created_at,
+        user_metadata: authUser.user_metadata,
+        user_profiles: profile || {
+          first_name: authUser.user_metadata?.first_name || "Pending",
+          last_name: authUser.user_metadata?.last_name || "Setup",
+          phone: authUser.user_metadata?.phone || null,
+          is_active: false,
+          business_setup_completed: false,
           created_at: authUser.created_at,
-          user_metadata: authUser.user_metadata,
-          user_profiles: profile,
-          user_roles: profile.user_roles || [],
-          user_location_memberships: profile.user_location_memberships || [],
-          user_invitations: profile.user_invitations || [],
-        }
-      })
-      .filter(Boolean) as UserWithDetails[]
+        },
+        user_roles: profile?.user_roles || [],
+        user_location_memberships: profile?.user_location_memberships || [],
+        user_invitations: profile?.user_invitations || [
+          {
+            status: "sent",
+            sent_at: authUser.created_at,
+            accepted_at: null,
+          },
+        ],
+      }
+    })
+
+    console.log("[v0] Combined users:", users.length)
 
     // Apply additional filters
     let filteredUsers = users
@@ -154,6 +174,7 @@ export async function getAllUsers(filters?: {
       )
     }
 
+    console.log("[v0] Filtered users:", filteredUsers.length)
     return { success: true, users: filteredUsers }
   } catch (error) {
     console.error("Error fetching users:", error)
