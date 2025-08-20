@@ -14,16 +14,22 @@ export async function signIn(formData: FormData) {
   const supabase = createClient()
 
   try {
-    const { data: profile } = await supabase
-      .from("user_profiles")
-      .select("failed_login_attempts, locked_until, email_verified_at")
-      .eq("id", (await supabase.auth.getUser()).data.user?.id || "")
-      .single()
+    // First, get user by email to check if account is locked
+    const { data: authUsers } = await supabase.auth.admin.listUsers()
+    const existingUser = authUsers?.users.find((u) => u.email === email)
 
-    // Check if account is locked
-    if (profile?.locked_until && new Date(profile.locked_until) > new Date()) {
-      const lockExpiry = new Date(profile.locked_until).toLocaleString()
-      redirect(`/auth/login?error=Account is locked until ${lockExpiry}`)
+    if (existingUser) {
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("failed_login_attempts, locked_until")
+        .eq("id", existingUser.id)
+        .single()
+
+      // Check if account is locked
+      if (profile?.locked_until && new Date(profile.locked_until) > new Date()) {
+        const lockExpiry = new Date(profile.locked_until).toLocaleString()
+        redirect(`/auth/login?error=Account is locked until ${lockExpiry}`)
+      }
     }
 
     const { data: authData, error } = await supabase.auth.signInWithPassword({
@@ -57,6 +63,7 @@ export async function signIn(formData: FormData) {
       }
     }
   } catch (error) {
+    console.error("Sign in error:", error)
     redirect("/auth/login?error=Authentication failed. Please try again.")
   }
 
