@@ -215,18 +215,36 @@ export function AccountSetupForm() {
 
           if (accessToken) {
             console.log("[v0] Using recovery token for password update")
-            const response = await supabase.auth.updateUser({ password }, { accessToken })
-            updateError = response.error
+            const { error: sessionError } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: "", // Recovery tokens don't need refresh token
+            })
 
-            if (!updateError) {
-              console.log("[v0] Password reset successful, user should now be logged in")
-              // After successful password reset, get the new session
-              const {
-                data: { session: newSession },
-              } = await supabase.auth.getSession()
-              if (newSession?.user) {
-                setUserEmail(newSession.user.email)
+            if (sessionError) {
+              console.log("[v0] Session set error with recovery token:", sessionError)
+              // Try direct password update with recovery token
+              const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/user`, {
+                method: "PUT",
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                  "Content-Type": "application/json",
+                  apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+                },
+                body: JSON.stringify({ password }),
+              })
+
+              if (!response.ok) {
+                const errorData = await response.json()
+                updateError = new Error(errorData.message || "Failed to update password")
+              } else {
+                console.log("[v0] Password reset successful via direct API call")
+                // Refresh the session after password update
+                await supabase.auth.refreshSession()
               }
+            } else {
+              // Session set successfully, now update password normally
+              const response = await supabase.auth.updateUser({ password })
+              updateError = response.error
             }
           } else {
             updateError = new Error("No access token available for password reset")
