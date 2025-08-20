@@ -3,6 +3,7 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server"
 import { getCurrentUser } from "@/lib/auth/get-user"
 import { revalidatePath } from "next/cache"
+import { sendInvitationEmail, sendPasswordResetEmail } from "@/lib/email/resend-service"
 
 export interface CreateUserData {
   email: string
@@ -299,6 +300,7 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
 
     // Handle retailer creation or assignment
     let retailerId = userData.existingRetailerId
+    let businessName = userData.businessName
     if ((userData.role === "retailer" || userData.role === "location_user") && userData.businessType === "new") {
       console.log("[v0] Creating new retailer:", userData.businessName)
 
@@ -323,7 +325,7 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
       const { data: retailer, error: retailerError } = await supabase
         .from("retailers")
         .insert(retailerData)
-        .select("id")
+        .select("id, business_name")
         .single()
 
       if (retailerError) {
@@ -344,7 +346,17 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
       }
 
       retailerId = retailer.id
+      businessName = retailer.business_name
       console.log("[v0] Retailer created successfully:", retailerId)
+    } else if (userData.businessType === "existing" && userData.existingRetailerId) {
+      // Get existing retailer business name
+      const { data: existingRetailer } = await supabase
+        .from("retailers")
+        .select("business_name")
+        .eq("id", userData.existingRetailerId)
+        .single()
+
+      businessName = existingRetailer?.business_name
     }
 
     // Create user role assignment
@@ -362,16 +374,20 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
     }
     console.log("[v0] User role assigned")
 
-    // Create user invitation record
+    // Generate invitation token
+    const invitationToken = `${authUser.user.id}_${Date.now()}`
+
     const { error: invitationError } = await supabase.from("user_invitations").insert({
-      user_id: authUser.user.id,
       email: userData.email,
       role: userData.role,
       invited_by: currentUser.id,
-      message:
-        userData.invitationMessage ||
-        "Welcome to our business management system. Please complete your account setup using the link below.",
+      retailer_id: retailerId || null,
+      invitation_token: invitationToken,
       status: "pending",
+      resent_count: 0,
+      email_provider: "resend",
+      delivery_status: "pending",
+      last_delivery_attempt: new Date().toISOString(),
     })
 
     if (invitationError) {
@@ -379,28 +395,38 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
       // Don't fail the entire operation for this
     }
 
-    // Send invitation email
-    const redirectUrl =
-      process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ||
-      `${process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"}/auth/setup-account`
-
-    const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(userData.email, {
-      redirectTo: redirectUrl,
+    console.log("[v0] Sending custom invitation email")
+    const emailResult = await sendInvitationEmail({
+      email: userData.email,
+      role: userData.role === "location_user" ? "location" : userData.role,
+      invitationToken,
+      invitedBy: `${currentUser.first_name} ${currentUser.last_name}`,
+      retailerName: businessName,
     })
 
-    if (inviteError) {
-      console.error("Failed to send invitation email:", inviteError)
-      // Update invitation status but don't fail the operation
+    if (!emailResult.success) {
+      console.error("Failed to send invitation email:", emailResult.error)
       await supabase
         .from("user_invitations")
-        .update({ status: "failed", error_message: inviteError.message })
-        .eq("user_id", authUser.user.id)
+        .update({
+          status: "failed",
+          delivery_status: "failed",
+          delivery_error: emailResult.error,
+          last_delivery_attempt: new Date().toISOString(),
+        })
+        .eq("email", userData.email)
     } else {
-      // Update invitation status to sent
+      console.log("[v0] Custom invitation email sent successfully")
       await supabase
         .from("user_invitations")
-        .update({ status: "sent", sent_at: new Date().toISOString() })
-        .eq("user_id", authUser.user.id)
+        .update({
+          status: "sent",
+          delivery_status: "delivered",
+          email_id: emailResult.emailId,
+          sent_at: new Date().toISOString(),
+          last_delivery_attempt: new Date().toISOString(),
+        })
+        .eq("email", userData.email)
     }
 
     // Log audit trail
@@ -538,54 +564,61 @@ export async function resendInvitation(userId: string) {
       return { error: "Unauthorized to resend invitations" }
     }
 
-    // Get user details
+    // Get user details with role and business info
     console.log("[v0] Getting user details for:", userId)
     const { data: user, error: userError } = await supabase.auth.admin.getUserById(userId)
     if (userError || !user.user?.email) {
       console.log("[v0] User not found:", userError)
       return { error: "User not found" }
     }
-    console.log("[v0] Found user email:", user.user.email)
 
-    // Check if user has already accepted invitation
-    const { data: profile, error: profileError } = await supabase
+    // Get user profile and role information
+    const { data: userDetails, error: detailsError } = await supabase
       .from("user_profiles")
-      .select("id, email_verified_at")
+      .select(`
+        id, 
+        first_name, 
+        last_name, 
+        email_verified_at,
+        user_roles!inner(role, retailer_id, retailers(business_name))
+      `)
       .eq("id", userId)
       .single()
 
-    if (profileError) {
-      console.log("[v0] Failed to check user status:", profileError)
-      return { error: "Failed to check user status" }
+    if (detailsError) {
+      console.log("[v0] Failed to get user details:", detailsError)
+      return { error: "Failed to get user details" }
     }
 
-    if (profile.email_verified_at) {
+    if (userDetails.email_verified_at) {
       console.log("[v0] User has already verified email")
       return { error: "User has already completed account setup" }
     }
 
-    const redirectUrl =
-      process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ||
-      `${process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"}/auth/setup-account`
+    const resetUrl = `${process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"}/auth/setup-account?token=${userId}&email=${encodeURIComponent(user.user.email)}&type=reset`
 
-    console.log("[v0] Sending password reset email to:", user.user.email, "with redirect:", redirectUrl)
-
-    // Since user already exists in Auth, use password reset instead of invite
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(user.user.email, {
-      redirectTo: redirectUrl,
+    console.log("[v0] Sending custom password reset email")
+    const emailResult = await sendPasswordResetEmail({
+      to: user.user.email,
+      resetUrl,
+      userName: `${userDetails.first_name} ${userDetails.last_name}`,
     })
 
-    if (resetError) {
-      console.log("[v0] Failed to send password reset email:", {
-        message: resetError.message,
-        details: resetError.details,
-        hint: resetError.hint,
-        code: resetError.code,
-      })
-      return { error: `Failed to send invitation email: ${resetError.message}` }
+    if (!emailResult.success) {
+      console.log("[v0] Failed to send password reset email:", emailResult.error)
+      await supabase
+        .from("user_invitations")
+        .update({
+          delivery_status: "failed",
+          delivery_error: emailResult.error,
+          last_delivery_attempt: new Date().toISOString(),
+        })
+        .eq("email", user.user.email)
+      return { error: `Failed to send invitation email: ${emailResult.error}` }
     }
-    console.log("[v0] Password reset email sent successfully")
+    console.log("[v0] Custom password reset email sent successfully")
 
+    // Update invitation record
     const { data: currentInvitation, error: getInvitationError } = await supabase
       .from("user_invitations")
       .select("resent_count")
@@ -599,10 +632,12 @@ export async function resendInvitation(userId: string) {
       .from("user_invitations")
       .update({
         status: "sent",
+        delivery_status: "delivered",
+        email_id: emailResult.emailId,
         sent_at: new Date().toISOString(),
         resent_count: currentResentCount + 1,
-        created_at: new Date().toISOString(), // Update timestamp to track resend
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now
+        last_delivery_attempt: new Date().toISOString(),
+        delivery_error: null, // Clear any previous errors
       })
       .eq("email", user.user.email)
 
