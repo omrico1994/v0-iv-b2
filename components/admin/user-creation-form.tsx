@@ -113,19 +113,42 @@ export function UserCreationForm() {
   }
 
   const canProceed = () => {
+    console.log("[v0] Checking canProceed for step:", currentStep)
+    console.log("[v0] Current form data:", formData)
+
     switch (currentStep) {
       case "role":
-        return !!formData.role
+        const roleResult = !!formData.role
+        console.log("[v0] Role canProceed:", roleResult)
+        return roleResult
       case "details":
-        return formData.email && formData.firstName && formData.lastName
+        const detailsResult = formData.email && formData.firstName && formData.lastName
+        console.log("[v0] Details canProceed:", detailsResult, {
+          email: !!formData.email,
+          firstName: !!formData.firstName,
+          lastName: !!formData.lastName,
+        })
+        return detailsResult
       case "business":
-        if (formData.role === "admin" || formData.role === "office") return true
-        return formData.businessType === "existing"
-          ? !!formData.existingRetailerId
-          : formData.businessType === "new"
-            ? !!formData.businessName
-            : false
+        if (formData.role === "admin" || formData.role === "office") {
+          console.log("[v0] Business canProceed (admin/office): true")
+          return true
+        }
+        const businessResult =
+          formData.businessType === "existing"
+            ? !!formData.existingRetailerId
+            : formData.businessType === "new"
+              ? !!formData.businessName
+              : false
+        console.log("[v0] Business canProceed:", businessResult, {
+          businessType: formData.businessType,
+          existingRetailerId: formData.existingRetailerId,
+          businessName: formData.businessName,
+          businessNameLength: formData.businessName?.length,
+        })
+        return businessResult
       default:
+        console.log("[v0] Default canProceed: true")
         return true
     }
   }
@@ -388,8 +411,16 @@ export function UserCreationForm() {
                           id="businessName"
                           placeholder="Acme Electronics"
                           value={formData.businessName}
-                          onChange={(e) => setFormData((prev) => ({ ...prev, businessName: e.target.value }))}
+                          onChange={(e) => {
+                            console.log("[v0] Business name changed:", e.target.value)
+                            setFormData((prev) => ({ ...prev, businessName: e.target.value }))
+                          }}
                         />
+                        {formData.businessType === "new" && (
+                          <p className="text-xs text-muted-foreground">
+                            Current value: "{formData.businessName}" (Length: {formData.businessName.length})
+                          </p>
+                        )}
                       </div>
 
                       <div className="space-y-2">
