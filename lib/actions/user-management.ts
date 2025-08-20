@@ -564,27 +564,27 @@ export async function resendInvitation(userId: string) {
       return { error: "User has already completed account setup" }
     }
 
-    // Send new invitation email
     const redirectUrl =
       process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ||
       `${process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"}/auth/setup-account`
 
-    console.log("[v0] Sending invitation email to:", user.user.email, "with redirect:", redirectUrl)
+    console.log("[v0] Sending password reset email to:", user.user.email, "with redirect:", redirectUrl)
 
-    const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(user.user.email, {
+    // Since user already exists in Auth, use password reset instead of invite
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(user.user.email, {
       redirectTo: redirectUrl,
     })
 
-    if (inviteError) {
-      console.log("[v0] Failed to send invitation email:", {
-        message: inviteError.message,
-        details: inviteError.details,
-        hint: inviteError.hint,
-        code: inviteError.code,
+    if (resetError) {
+      console.log("[v0] Failed to send password reset email:", {
+        message: resetError.message,
+        details: resetError.details,
+        hint: resetError.hint,
+        code: resetError.code,
       })
-      return { error: `Failed to send invitation email: ${inviteError.message}` }
+      return { error: `Failed to send invitation email: ${resetError.message}` }
     }
-    console.log("[v0] Invitation email sent successfully")
+    console.log("[v0] Password reset email sent successfully")
 
     const { data: currentInvitation, error: getInvitationError } = await supabase
       .from("user_invitations")
