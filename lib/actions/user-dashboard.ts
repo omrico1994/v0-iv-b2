@@ -74,10 +74,9 @@ export async function getAllUsers(filters?: {
 
     console.log("[v0] Found auth users:", authUsers.users.length)
 
-    // Get user profiles and roles
     let profileQuery = supabase.from("user_profiles").select(`
         *,
-        user_roles (
+        user_roles!user_roles_user_id_fkey (
           role,
           retailer_id,
           retailers (
@@ -86,7 +85,7 @@ export async function getAllUsers(filters?: {
             business_name
           )
         ),
-        user_location_memberships (
+        user_location_memberships!user_location_memberships_user_id_fkey (
           location_id,
           is_active,
           locations (
@@ -96,11 +95,6 @@ export async function getAllUsers(filters?: {
               business_name
             )
           )
-        ),
-        user_invitations (
-          status,
-          sent_at,
-          accepted_at
         )
       `)
 
@@ -120,8 +114,13 @@ export async function getAllUsers(filters?: {
 
     console.log("[v0] Found profiles:", profiles?.length || 0)
 
+    const { data: invitations } = await supabase.from("user_invitations").select("*")
+
+    console.log("[v0] Found invitations:", invitations?.length || 0)
+
     const users: UserWithDetails[] = authUsers.users.map((authUser) => {
-      const profile = profiles?.find((p) => p.id === authUser.id)
+      const profile = profiles?.find((p) => p.user_id === authUser.id)
+      const userInvitations = invitations?.filter((inv) => inv.email === authUser.email) || []
 
       // Include user even if no profile exists yet
       return {
@@ -139,13 +138,20 @@ export async function getAllUsers(filters?: {
         },
         user_roles: profile?.user_roles || [],
         user_location_memberships: profile?.user_location_memberships || [],
-        user_invitations: profile?.user_invitations || [
-          {
-            status: "sent",
-            sent_at: authUser.created_at,
-            accepted_at: null,
-          },
-        ],
+        user_invitations:
+          userInvitations.length > 0
+            ? userInvitations.map((inv) => ({
+                status: inv.accepted_at ? "accepted" : "sent",
+                sent_at: inv.created_at,
+                accepted_at: inv.accepted_at,
+              }))
+            : [
+                {
+                  status: "sent",
+                  sent_at: authUser.created_at,
+                  accepted_at: null,
+                },
+              ],
       }
     })
 
