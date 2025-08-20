@@ -91,18 +91,26 @@ export function UserManagementDashboard() {
   }, [filters])
 
   const loadData = async () => {
+    console.log("[v0] Loading initial data...")
     setIsLoading(true)
     try {
       const [usersResult, retailersResult] = await Promise.all([getAllUsers(), getRetailers()])
 
+      console.log("[v0] Users result:", usersResult)
+      console.log("[v0] Retailers result:", retailersResult)
+
       if (usersResult.success && usersResult.users) {
+        console.log("[v0] Setting users:", usersResult.users.length)
         setUsers(usersResult.users)
+      } else {
+        console.log("[v0] Users result failed or no users:", usersResult)
       }
 
       if (retailersResult.success && retailersResult.retailers) {
         setRetailers(retailersResult.retailers)
       }
     } catch (error) {
+      console.log("[v0] Error loading data:", error)
       setResult({ error: "Failed to load data" })
     } finally {
       setIsLoading(false)
@@ -110,13 +118,45 @@ export function UserManagementDashboard() {
   }
 
   const loadUsers = async () => {
+    console.log("[v0] Loading users with filters:", filters)
     try {
-      const result = await getAllUsers(filters)
+      const result = await getAllUsers()
+      console.log("[v0] Load users result:", result)
       if (result.success && result.users) {
-        setUsers(result.users)
+        console.log("[v0] Filtering users client-side, total users:", result.users.length)
+        let filteredUsers = result.users
+
+        if (filters.search) {
+          filteredUsers = filteredUsers.filter(
+            (user) =>
+              user.email.toLowerCase().includes(filters.search.toLowerCase()) ||
+              `${user.user_profiles.first_name} ${user.user_profiles.last_name}`
+                .toLowerCase()
+                .includes(filters.search.toLowerCase()),
+          )
+        }
+
+        if (filters.role !== "all") {
+          filteredUsers = filteredUsers.filter((user) => user.user_roles[0]?.role === filters.role)
+        }
+
+        if (filters.retailerId !== "all") {
+          filteredUsers = filteredUsers.filter((user) => user.user_roles[0]?.retailer_id === filters.retailerId)
+        }
+
+        if (filters.status !== "all") {
+          filteredUsers = filteredUsers.filter((user) =>
+            filters.status === "active" ? user.user_profiles.is_active : !user.user_profiles.is_active,
+          )
+        }
+
+        console.log("[v0] Filtered users count:", filteredUsers.length)
+        setUsers(filteredUsers)
+      } else {
+        console.log("[v0] Load users failed:", result)
       }
     } catch (error) {
-      console.error("Error loading users:", error)
+      console.error("[v0] Error loading users:", error)
     }
   }
 
