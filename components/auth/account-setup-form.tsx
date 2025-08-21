@@ -60,42 +60,38 @@ export function AccountSetupForm() {
             setInvitationToken(customToken)
             setUserEmail(email)
 
-            const supabase = createClient()
-            const { data: invitation, error: invitationError } = await supabase
-              .from("user_invitations")
-              .select("*")
-              .eq("invitation_token", customToken)
-              .eq("email", email)
-              .eq("status", "pending")
-              .single()
+            try {
+              const response = await fetch("/api/validate-invitation", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  token: customToken,
+                  email: email,
+                }),
+              })
 
-            console.log("[v0] Database query result:", { invitation, invitationError })
-            if (invitationError) {
-              console.log("[v0] Full error details:", JSON.stringify(invitationError, null, 2))
-            }
+              const result = await response.json()
+              console.log("[v0] Invitation validation result:", result)
 
-            if (invitationError || !invitation) {
-              console.log("[v0] Invalid or expired invitation token:", invitationError)
-              setError("Invalid or expired invitation link. Please request a new invitation.")
+              if (!response.ok || !result.valid) {
+                console.log("[v0] Invalid or expired invitation token:", result.error)
+                setError("Invalid or expired invitation link. Please request a new invitation.")
+                setIsInitialized(true)
+                return
+              }
+
+              console.log("[v0] Valid invitation token found")
+              setError(null)
+              setIsInitialized(true)
+              return
+            } catch (validationError) {
+              console.log("[v0] Invitation validation error:", validationError)
+              setError("Failed to validate invitation. Please try again.")
               setIsInitialized(true)
               return
             }
-
-            const tokenAge = Date.now() - new Date(invitation.created_at).getTime()
-            const maxAge = 24 * 60 * 60 * 1000 // 24 hours
-
-            if (tokenAge > maxAge) {
-              console.log("[v0] Invitation token expired")
-              setIsLinkExpired(true)
-              setError("This invitation link has expired. Please request a new one.")
-              setIsInitialized(true)
-              return
-            }
-
-            console.log("[v0] Valid invitation token found")
-            setError(null)
-            setIsInitialized(true)
-            return
           }
 
           let type = searchParams.get("type")
