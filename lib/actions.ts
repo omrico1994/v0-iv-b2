@@ -19,26 +19,7 @@ export async function signIn(formData: FormData) {
   try {
     console.log("[v0] Starting authentication process...")
 
-    // Check account lock status first
-    const { data: authUsers } = await supabase.auth.admin.listUsers()
-    const existingUser = authUsers?.users.find((u) => u.email === email)
-
-    if (existingUser) {
-      const { data: profile } = await supabase
-        .from("user_profiles")
-        .select("failed_login_attempts, locked_until")
-        .eq("id", existingUser.id)
-        .single()
-
-      // Check if account is locked
-      if (profile?.locked_until && new Date(profile.locked_until) > new Date()) {
-        console.log("[v0] Account is locked until:", profile.locked_until)
-        const lockExpiry = new Date(profile.locked_until).toLocaleString()
-        redirect(`/auth/login?error=Account is locked until ${lockExpiry}`)
-      }
-    }
-
-    // Attempt authentication
+    // Attempt authentication directly
     console.log("[v0] Attempting sign in with password...")
     const { data: authData, error } = await supabase.auth.signInWithPassword({
       email,
@@ -46,18 +27,15 @@ export async function signIn(formData: FormData) {
     })
 
     if (error) {
-      console.log("[v0] Sign in error:", error)
-      await trackFailedLogin(email)
+      console.log("[v0] Sign in error:", error.message)
+      trackFailedLoginSimple(email).catch(console.error)
       redirect("/auth/login?error=Invalid email or password")
     }
 
     console.log("[v0] Sign in successful, user ID:", authData.user?.id)
 
-    // Authentication succeeded - redirect to dashboard immediately
-    // Handle profile updates in background without blocking redirect
     if (authData.user) {
-      // Fire and forget profile updates - don't await or catch errors
-      updateUserProfileAfterLogin(authData.user.id, authData.user.email).catch((error) => {
+      updateUserProfileAfterLogin(authData.user.id).catch((error) => {
         console.log("[v0] Background profile update error (non-blocking):", error)
       })
     }
@@ -70,7 +48,7 @@ export async function signIn(formData: FormData) {
   }
 }
 
-async function updateUserProfileAfterLogin(userId: string, email: string | undefined) {
+async function updateUserProfileAfterLogin(userId: string) {
   const supabase = createClient()
 
   try {
@@ -86,41 +64,28 @@ async function updateUserProfileAfterLogin(userId: string, email: string | undef
       })
       .eq("id", userId)
 
-    // Check email verification - redirect if needed
-    const { data: userProfile } = await supabase
-      .from("user_profiles")
-      .select("email_verified_at")
-      .eq("id", userId)
-      .single()
-
-    if (!userProfile?.email_verified_at) {
-      console.log("[v0] Email not verified - user will be prompted on dashboard")
-      // Don't redirect here - let the dashboard handle email verification prompts
-    }
+    console.log("[v0] Profile updated successfully")
   } catch (error) {
     console.log("[v0] Profile update error (non-blocking):", error)
   }
 }
 
-async function trackFailedLogin(email: string) {
+async function trackFailedLoginSimple(email: string) {
   const supabase = createClient()
 
   try {
     console.log("[v0] Tracking failed login for email:", email)
 
-    // Get user by email from auth
-    const { data: authUsers } = await supabase.auth.admin.listUsers()
-    const user = authUsers?.users.find((u) => u.email === email)
+    // Update failed attempts for user profile by email
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("id, failed_login_attempts")
+      .eq("email", email)
+      .single()
 
-    if (user) {
-      const { data: profile } = await supabase
-        .from("user_profiles")
-        .select("failed_login_attempts")
-        .eq("id", user.id)
-        .single()
-
-      const currentAttempts = (profile?.failed_login_attempts || 0) + 1
-      const maxAttempts = 5 // Lock after 5 failed attempts
+    if (profile) {
+      const currentAttempts = (profile.failed_login_attempts || 0) + 1
+      const maxAttempts = 5
 
       const updateData: any = {
         failed_login_attempts: currentAttempts,
@@ -132,8 +97,7 @@ async function trackFailedLogin(email: string) {
         updateData.locked_until = new Date(Date.now() + lockDuration).toISOString()
       }
 
-      console.log("[v0] Updating failed login attempts...")
-      await supabase.from("user_profiles").update(updateData).eq("id", user.id)
+      await supabase.from("user_profiles").update(updateData).eq("id", profile.id)
     }
   } catch (error) {
     console.error("[v0] Error tracking failed login:", error)
