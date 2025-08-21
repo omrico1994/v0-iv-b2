@@ -379,7 +379,7 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
 
     const { error: invitationError } = await supabase.from("user_invitations").insert({
       email: userData.email,
-      role: userData.role,
+      role: userData.role === "location_user" ? "location" : userData.role,
       invited_by: currentUser.id,
       retailer_id: retailerId || null,
       invitation_token: invitationToken,
@@ -572,25 +572,40 @@ export async function resendInvitation(userId: string) {
       return { error: "User not found" }
     }
 
-    // Get user profile and role information
-    const { data: userDetails, error: detailsError } = await supabase
+    const { data: userProfile, error: profileError } = await supabase
       .from("user_profiles")
-      .select(`
-        id, 
-        first_name, 
-        last_name, 
-        email_verified_at,
-        user_roles!inner(role, retailer_id, retailers(business_name))
-      `)
+      .select("id, first_name, last_name, email_verified_at")
       .eq("id", userId)
       .single()
 
-    if (detailsError) {
-      console.log("[v0] Failed to get user details:", detailsError)
+    if (profileError) {
+      console.log("[v0] Failed to get user profile:", profileError)
       return { error: "Failed to get user details" }
     }
 
-    if (userDetails.email_verified_at) {
+    const { data: userRole, error: roleError } = await supabase
+      .from("user_roles")
+      .select("role, retailer_id")
+      .eq("user_id", userId)
+      .single()
+
+    if (roleError) {
+      console.log("[v0] Failed to get user role:", roleError)
+      return { error: "Failed to get user role" }
+    }
+
+    let retailerName = null
+    if (userRole.retailer_id) {
+      const { data: retailer } = await supabase
+        .from("retailers")
+        .select("business_name")
+        .eq("id", userRole.retailer_id)
+        .single()
+
+      retailerName = retailer?.business_name
+    }
+
+    if (userProfile.email_verified_at) {
       console.log("[v0] User has already verified email")
       return { error: "User has already completed account setup" }
     }
@@ -601,7 +616,7 @@ export async function resendInvitation(userId: string) {
     const emailResult = await sendPasswordResetEmail({
       to: user.user.email,
       resetUrl,
-      userName: `${userDetails.first_name} ${userDetails.last_name}`,
+      userName: `${userProfile.first_name} ${userProfile.last_name}`,
     })
 
     if (!emailResult.success) {
