@@ -55,6 +55,7 @@ export function AccountSetupForm() {
 
           if (customToken && email) {
             console.log("[v0] Found custom invitation token, validating...")
+            console.log("[v0] Query params:", { customToken, email })
             setIsInvitationFlow(true)
             setInvitationToken(customToken)
             setUserEmail(email)
@@ -67,6 +68,11 @@ export function AccountSetupForm() {
               .eq("email", email)
               .eq("status", "pending")
               .single()
+
+            console.log("[v0] Database query result:", { invitation, invitationError })
+            if (invitationError) {
+              console.log("[v0] Full error details:", JSON.stringify(invitationError, null, 2))
+            }
 
             if (invitationError || !invitation) {
               console.log("[v0] Invalid or expired invitation token:", invitationError)
