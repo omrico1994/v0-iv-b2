@@ -21,6 +21,8 @@ export function AccountSetupForm() {
   const [isLinkExpired, setIsLinkExpired] = useState(false)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
+  const [invitationToken, setInvitationToken] = useState<string | null>(null)
+  const [isInvitationFlow, setIsInvitationFlow] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -44,6 +46,48 @@ export function AccountSetupForm() {
             console.log("[v0] Detected expired reset link")
             setIsLinkExpired(true)
             setError("This reset link has expired. Please request a new one.")
+            setIsInitialized(true)
+            return
+          }
+
+          const customToken = searchParams.get("token")
+          const email = searchParams.get("email")
+
+          if (customToken && email) {
+            console.log("[v0] Found custom invitation token, validating...")
+            setIsInvitationFlow(true)
+            setInvitationToken(customToken)
+            setUserEmail(email)
+
+            const supabase = createClient()
+            const { data: invitation, error: invitationError } = await supabase
+              .from("user_invitations")
+              .select("*")
+              .eq("token", customToken)
+              .eq("email", email)
+              .eq("status", "pending")
+              .single()
+
+            if (invitationError || !invitation) {
+              console.log("[v0] Invalid or expired invitation token:", invitationError)
+              setError("Invalid or expired invitation link. Please request a new invitation.")
+              setIsInitialized(true)
+              return
+            }
+
+            const tokenAge = Date.now() - new Date(invitation.created_at).getTime()
+            const maxAge = 24 * 60 * 60 * 1000 // 24 hours
+
+            if (tokenAge > maxAge) {
+              console.log("[v0] Invitation token expired")
+              setIsLinkExpired(true)
+              setError("This invitation link has expired. Please request a new one.")
+              setIsInitialized(true)
+              return
+            }
+
+            console.log("[v0] Valid invitation token found")
+            setError(null)
             setIsInitialized(true)
             return
           }
@@ -156,6 +200,54 @@ export function AccountSetupForm() {
     startTransition(async () => {
       try {
         const supabase = createClient()
+
+        if (isInvitationFlow && invitationToken && userEmail) {
+          console.log("[v0] Processing invitation signup")
+
+          const { data: authData, error: signUpError } = await supabase.auth.signUp({
+            email: userEmail,
+            password: password,
+            options: {
+              emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || window.location.origin,
+            },
+          })
+
+          if (signUpError) {
+            console.log("[v0] Signup error:", signUpError)
+            setError(signUpError.message)
+            return
+          }
+
+          if (authData.user) {
+            const { error: profileError } = await supabase
+              .from("user_profiles")
+              .update({
+                email_verified_at: new Date().toISOString(),
+                last_login_at: new Date().toISOString(),
+              })
+              .eq("user_id", authData.user.id)
+
+            if (profileError) {
+              console.log("[v0] Profile update error:", profileError)
+            }
+
+            const { error: invitationError } = await supabase
+              .from("user_invitations")
+              .update({
+                status: "accepted",
+                accepted_at: new Date().toISOString(),
+              })
+              .eq("token", invitationToken)
+
+            if (invitationError) {
+              console.log("[v0] Invitation update error:", invitationError)
+            }
+
+            console.log("[v0] Invitation signup successful")
+            router.push("/dashboard")
+            return
+          }
+        }
 
         console.log("[v0] Attempting password update, isPasswordReset:", isPasswordReset)
 
@@ -308,7 +400,9 @@ export function AccountSetupForm() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{isPasswordReset ? "Reset Your Password" : "Set Your Password"}</CardTitle>
+        <CardTitle>
+          {isInvitationFlow ? "Set Your Password" : isPasswordReset ? "Reset Your Password" : "Set Your Password"}
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -317,6 +411,13 @@ export function AccountSetupForm() {
               <AlertCircle className="h-4 w-4" />
               <AlertDescription className="text-destructive">{error}</AlertDescription>
             </Alert>
+          )}
+
+          {isInvitationFlow && userEmail && (
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input value={userEmail} disabled className="bg-muted" />
+            </div>
           )}
 
           <div className="space-y-2">
@@ -347,7 +448,7 @@ export function AccountSetupForm() {
 
           <Button type="submit" className="w-full" disabled={isPending || !password || !confirmPassword}>
             {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            {isPasswordReset ? "Update Password" : "Complete Setup"}
+            {isInvitationFlow ? "Complete Setup" : isPasswordReset ? "Update Password" : "Complete Setup"}
           </Button>
         </form>
       </CardContent>
