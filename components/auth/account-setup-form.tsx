@@ -63,7 +63,7 @@ export function AccountSetupForm() {
             const { data: invitation, error: invitationError } = await supabase
               .from("user_invitations")
               .select("*")
-              .eq("token", customToken)
+              .eq("invitation_token", customToken)
               .eq("email", email)
               .eq("status", "pending")
               .single()
@@ -237,7 +237,7 @@ export function AccountSetupForm() {
                 status: "accepted",
                 accepted_at: new Date().toISOString(),
               })
-              .eq("token", invitationToken)
+              .eq("invitation_token", invitationToken)
 
             if (invitationError) {
               console.log("[v0] Invitation update error:", invitationError)
