@@ -64,44 +64,50 @@ export async function signIn(formData: FormData) {
     console.log("[v0] Sign in successful, user ID:", authData.user?.id)
 
     if (authData.user) {
-      console.log("[v0] Updating user profile after successful login...")
-      const { error: updateError } = await supabase
-        .from("user_profiles")
-        .update({
-          last_login_at: new Date().toISOString(),
-          failed_login_attempts: 0, // Reset failed attempts on successful login
-          locked_until: null, // Clear any existing lock
-        })
-        .eq("id", authData.user.id)
+      // Update profile in background - don't let errors here affect successful login
+      try {
+        console.log("[v0] Updating user profile after successful login...")
+        const { error: updateError } = await supabase
+          .from("user_profiles")
+          .update({
+            last_login_at: new Date().toISOString(),
+            failed_login_attempts: 0, // Reset failed attempts on successful login
+            locked_until: null, // Clear any existing lock
+          })
+          .eq("id", authData.user.id)
 
-      if (updateError) {
-        console.log("[v0] Profile update error:", updateError)
-      }
+        if (updateError) {
+          console.log("[v0] Profile update error (non-blocking):", updateError)
+        }
 
-      console.log("[v0] Checking email verification status...")
-      const { data: userProfile, error: verifyError } = await supabase
-        .from("user_profiles")
-        .select("email_verified_at")
-        .eq("id", authData.user.id)
-        .single()
+        console.log("[v0] Checking email verification status...")
+        const { data: userProfile, error: verifyError } = await supabase
+          .from("user_profiles")
+          .select("email_verified_at")
+          .eq("id", authData.user.id)
+          .single()
 
-      if (verifyError) {
-        console.log("[v0] Email verification check error:", verifyError)
-      }
+        if (verifyError) {
+          console.log("[v0] Email verification check error (non-blocking):", verifyError)
+        }
 
-      if (!userProfile?.email_verified_at) {
-        console.log("[v0] Email not verified, redirecting to verification page")
-        redirect("/auth/verify-email?message=Please verify your email before continuing")
+        if (!userProfile?.email_verified_at) {
+          console.log("[v0] Email not verified, redirecting to verification page")
+          redirect("/auth/verify-email?message=Please verify your email before continuing")
+        }
+      } catch (profileError) {
+        // Profile errors shouldn't prevent successful login
+        console.log("[v0] Profile update error (non-blocking):", profileError)
       }
     }
 
     console.log("[v0] Authentication complete, redirecting to dashboard")
+    redirect("/dashboard")
   } catch (error) {
-    console.error("[v0] Sign in catch block error:", error)
+    // Only catch errors that happen before successful authentication
+    console.error("[v0] Sign in authentication error:", error)
     redirect("/auth/login?error=Authentication failed. Please try again.")
   }
-
-  redirect("/dashboard")
 }
 
 async function trackFailedLogin(email: string) {
