@@ -427,6 +427,7 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
           delivery_status: "delivered",
           email_id: emailResult.emailId,
           sent_at: new Date().toISOString(),
+          resent_count: 0,
           last_delivery_attempt: new Date().toISOString(),
         })
         .eq("email", userData.email)
@@ -611,7 +612,19 @@ export async function resendInvitation(userId: string) {
       return { error: "User has already completed account setup" }
     }
 
-    const resetUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/auth/setup-account?token=${userId}&email=${encodeURIComponent(user.user.email)}&type=reset`
+    const { data: invitation, error: invitationError } = await supabase
+      .from("user_invitations")
+      .select("invitation_token")
+      .eq("email", user.user.email)
+      .eq("status", "pending")
+      .single()
+
+    if (invitationError || !invitation) {
+      console.log("[v0] No pending invitation found:", invitationError)
+      return { error: "No pending invitation found for this user" }
+    }
+
+    const resetUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/auth/setup-account?token=${invitation.invitation_token}&email=${encodeURIComponent(user.user.email)}&type=reset`
 
     console.log("[v0] Sending custom password reset email")
     const emailResult = await sendPasswordResetEmail({
