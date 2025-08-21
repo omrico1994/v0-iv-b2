@@ -205,20 +205,38 @@ export function AccountSetupForm() {
 
         if (isInvitationFlow && invitationToken && userEmail) {
           console.log("[v0] Processing invitation signup")
-
-          const response = await fetch("/api/complete-invitation-signup", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              token: invitationToken,
-              email: userEmail,
-              password: password,
-            }),
+          console.log("[v0] Making API call to /api/complete-invitation-signup with:", {
+            token: invitationToken,
+            email: userEmail,
+            passwordLength: password.length,
           })
 
-          const result = await response.json()
+          let response
+          let result
+
+          try {
+            response = await fetch("/api/complete-invitation-signup", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                token: invitationToken,
+                email: userEmail,
+                password: password,
+              }),
+            })
+
+            console.log("[v0] API response status:", response.status)
+            console.log("[v0] API response ok:", response.ok)
+
+            result = await response.json()
+            console.log("[v0] API response body:", result)
+          } catch (fetchError) {
+            console.log("[v0] Fetch error:", fetchError)
+            setError("Network error: Failed to connect to server")
+            return
+          }
 
           if (!response.ok) {
             console.log("[v0] Invitation signup error:", result.error)
@@ -334,6 +352,13 @@ export function AccountSetupForm() {
         router.push("/dashboard")
       } catch (error) {
         console.log("[v0] Setup error:", error)
+        console.log("[v0] Error details:", {
+          message: error instanceof Error ? error.message : "Unknown error",
+          stack: error instanceof Error ? error.stack : "No stack trace",
+          isInvitationFlow,
+          hasToken: !!invitationToken,
+          hasEmail: !!userEmail,
+        })
         setError("An unexpected error occurred")
       }
     })
