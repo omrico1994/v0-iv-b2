@@ -21,6 +21,8 @@ export function AccountSetupForm() {
   const [isLinkExpired, setIsLinkExpired] = useState(false)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
+  const [invitationToken, setInvitationToken] = useState<string | null>(null)
+  const [isInvitationFlow, setIsInvitationFlow] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -37,54 +39,6 @@ export function AccountSetupForm() {
           const hash = window.location.hash.substring(1)
           const hashParams = new URLSearchParams(hash)
 
-          const customToken = urlSearchParams.get("token")
-          const invitationEmail = urlSearchParams.get("email")
-
-          if (customToken && invitationEmail) {
-            console.log("[v0] Found custom invitation token, validating...")
-            console.log("[v0] Query params:", { token: customToken, email: invitationEmail })
-
-            const supabase = createClient()
-
-            // Validate the custom invitation token
-            const { data: invitation, error: invitationError } = await supabase
-              .from("user_invitations")
-              .select("*")
-              .eq("invitation_token", customToken)
-              .eq("email", decodeURIComponent(invitationEmail))
-              .eq("status", "sent")
-              .single()
-
-            console.log("[v0] Invitation validation result:", { invitation, error: invitationError })
-
-            if (invitationError || !invitation) {
-              console.log("[v0] Invalid or expired invitation token")
-              setError("Invalid or expired invitation")
-              setIsInitialized(true)
-              return
-            }
-
-            console.log("[v0] Valid invitation token found")
-
-            // Check if user already exists in Supabase Auth
-            const { data: existingUser } = await supabase.auth.admin.getUserById(invitation.user_id || "")
-
-            if (existingUser?.user) {
-              console.log("[v0] User exists, processing password reset flow")
-              setIsPasswordReset(true)
-              setUserEmail(invitationEmail)
-              setError(null)
-            } else {
-              console.log("[v0] Processing invitation signup")
-              setIsPasswordReset(false)
-              setUserEmail(invitationEmail)
-              setError(null)
-            }
-
-            setIsInitialized(true)
-            return
-          }
-
           const errorCode = urlSearchParams.get("error_code") || hashParams.get("error_code")
           const errorDescription = urlSearchParams.get("error_description") || hashParams.get("error_description")
 
@@ -94,6 +48,50 @@ export function AccountSetupForm() {
             setError("This reset link has expired. Please request a new one.")
             setIsInitialized(true)
             return
+          }
+
+          const customToken = searchParams.get("token")
+          const email = searchParams.get("email")
+
+          if (customToken && email) {
+            console.log("[v0] Found custom invitation token, validating...")
+            console.log("[v0] Query params:", { customToken, email })
+            setIsInvitationFlow(true)
+            setInvitationToken(customToken)
+            setUserEmail(email)
+
+            try {
+              const response = await fetch("/api/validate-invitation", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  token: customToken,
+                  email: email,
+                }),
+              })
+
+              const result = await response.json()
+              console.log("[v0] Invitation validation result:", result)
+
+              if (!response.ok || !result.valid) {
+                console.log("[v0] Invalid or expired invitation token:", result.error)
+                setError("Invalid or expired invitation link. Please request a new invitation.")
+                setIsInitialized(true)
+                return
+              }
+
+              console.log("[v0] Valid invitation token found")
+              setError(null)
+              setIsInitialized(true)
+              return
+            } catch (validationError) {
+              console.log("[v0] Invitation validation error:", validationError)
+              setError("Failed to validate invitation. Please try again.")
+              setIsInitialized(true)
+              return
+            }
           }
 
           let type = searchParams.get("type")
@@ -204,74 +202,46 @@ export function AccountSetupForm() {
     startTransition(async () => {
       try {
         const supabase = createClient()
-        const urlSearchParams = new URLSearchParams(window.location.search)
-        const customToken = urlSearchParams.get("token")
-        const invitationEmail = urlSearchParams.get("email")
 
-        console.log("[v0] Attempting password update, isPasswordReset:", isPasswordReset)
+        if (isInvitationFlow && invitationToken && userEmail) {
+          console.log("[v0] Processing invitation signup")
 
-        if (customToken && invitationEmail && !isPasswordReset) {
-          console.log("[v0] Processing custom invitation signup")
-
-          // Get invitation details
-          const { data: invitation, error: invitationError } = await supabase
-            .from("user_invitations")
-            .select("*")
-            .eq("invitation_token", customToken)
-            .eq("email", decodeURIComponent(invitationEmail))
-            .single()
-
-          if (invitationError || !invitation) {
-            setError("Invalid or expired invitation")
-            return
-          }
-
-          // Sign up the user with the invitation email and password
-          const { data: authData, error: signUpError } = await supabase.auth.signUp({
-            email: decodeURIComponent(invitationEmail),
-            password: password,
-            options: {
-              emailRedirectTo: `${window.location.origin}/dashboard`,
+          const response = await fetch("/api/complete-invitation-signup", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
             },
+            body: JSON.stringify({
+              token: invitationToken,
+              email: userEmail,
+              password: password,
+            }),
           })
 
-          if (signUpError) {
-            console.log("[v0] Invitation signup error:", signUpError.message)
-            setError(signUpError.message)
+          const result = await response.json()
+
+          if (!response.ok) {
+            console.log("[v0] Invitation signup error:", result.error)
+            setError(result.error || "Failed to complete account setup")
             return
           }
 
-          if (authData.user) {
-            // Update user profile
-            const { error: profileError } = await supabase
-              .from("user_profiles")
-              .update({
-                email_verified_at: new Date().toISOString(),
-                last_login_at: new Date().toISOString(),
-              })
-              .eq("user_id", authData.user.id)
+          console.log("[v0] Invitation signup successful, signing in user...")
 
-            if (profileError) {
-              console.log("[v0] Profile update error:", profileError)
-            }
+          const { error: signInError } = await supabase.auth.signInWithPassword({
+            email: userEmail,
+            password: password,
+          })
 
-            // Update invitation status
-            const { error: invitationUpdateError } = await supabase
-              .from("user_invitations")
-              .update({
-                status: "accepted",
-                accepted_at: new Date().toISOString(),
-              })
-              .eq("invitation_token", customToken)
-
-            if (invitationUpdateError) {
-              console.log("[v0] Invitation update error:", invitationUpdateError)
-            }
-
-            console.log("[v0] Custom invitation signup successful")
-            router.push("/dashboard")
+          if (signInError) {
+            console.log("[v0] Auto sign-in error:", signInError)
+            router.push("/auth/login?message=Account created successfully. Please sign in.")
             return
           }
+
+          console.log("[v0] User signed in successfully, redirecting to:", result.redirectUrl)
+          router.push(result.redirectUrl || "/dashboard")
+          return
         }
 
         let updateError
@@ -423,7 +393,9 @@ export function AccountSetupForm() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{isPasswordReset ? "Reset Your Password" : "Set Your Password"}</CardTitle>
+        <CardTitle>
+          {isInvitationFlow ? "Set Your Password" : isPasswordReset ? "Reset Your Password" : "Set Your Password"}
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -432,6 +404,13 @@ export function AccountSetupForm() {
               <AlertCircle className="h-4 w-4" />
               <AlertDescription className="text-destructive">{error}</AlertDescription>
             </Alert>
+          )}
+
+          {isInvitationFlow && userEmail && (
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input value={userEmail} disabled className="bg-muted" />
+            </div>
           )}
 
           <div className="space-y-2">
@@ -462,7 +441,7 @@ export function AccountSetupForm() {
 
           <Button type="submit" className="w-full" disabled={isPending || !password || !confirmPassword}>
             {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            {isPasswordReset ? "Update Password" : "Complete Setup"}
+            {isInvitationFlow ? "Complete Setup" : isPasswordReset ? "Update Password" : "Complete Setup"}
           </Button>
         </form>
       </CardContent>

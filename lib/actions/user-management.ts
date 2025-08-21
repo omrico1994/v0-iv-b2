@@ -396,12 +396,15 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
     }
 
     console.log("[v0] Sending custom invitation email")
+    const setupUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/auth/setup-account?token=${invitationToken}&email=${encodeURIComponent(userData.email)}`
+
     const emailResult = await sendInvitationEmail({
-      email: userData.email,
+      to: userData.email,
+      firstName: userData.firstName,
+      lastName: userData.lastName,
       role: userData.role === "location_user" ? "location" : userData.role,
-      invitationToken,
-      invitedBy: `${currentUser.first_name} ${currentUser.last_name}`,
-      retailerName: businessName,
+      businessName: businessName,
+      setupUrl: setupUrl,
     })
 
     if (!emailResult.success) {
@@ -424,6 +427,7 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
           delivery_status: "delivered",
           email_id: emailResult.emailId,
           sent_at: new Date().toISOString(),
+          resent_count: 0,
           last_delivery_attempt: new Date().toISOString(),
         })
         .eq("email", userData.email)
@@ -518,12 +522,10 @@ export async function resetUserPassword(userId: string) {
     }
 
     // Send password reset email
-    const resetRedirectUrl =
-      process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ||
-      `${process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"}/auth/reset-password`
+    const resetUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/auth/reset-password`
 
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(user.user.email, {
-      redirectTo: resetRedirectUrl,
+      redirectTo: resetUrl,
     })
 
     if (resetError) {
@@ -610,13 +612,28 @@ export async function resendInvitation(userId: string) {
       return { error: "User has already completed account setup" }
     }
 
-    const resetUrl = `${process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"}/auth/setup-account?token=${userId}&email=${encodeURIComponent(user.user.email)}&type=reset`
+    const { data: invitation, error: invitationError } = await supabase
+      .from("user_invitations")
+      .select("invitation_token, status")
+      .eq("email", user.user.email)
+      .in("status", ["pending", "sent"])
+      .single()
+
+    if (invitationError || !invitation) {
+      console.log("[v0] No resendable invitation found:", invitationError)
+      return { error: "No pending invitation found for this user" }
+    }
+
+    const resetUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/auth/setup-account?token=${invitation.invitation_token}&email=${encodeURIComponent(user.user.email)}&type=reset`
 
     console.log("[v0] Sending custom password reset email")
     const emailResult = await sendPasswordResetEmail({
       to: user.user.email,
       resetUrl,
-      userName: `${userProfile.first_name} ${userProfile.last_name}`,
+      firstName: userProfile.first_name,
+      lastName: userProfile.last_name,
+      role: userRole.role === "location_user" ? "location" : userRole.role,
+      businessName: retailerName,
     })
 
     if (!emailResult.success) {
