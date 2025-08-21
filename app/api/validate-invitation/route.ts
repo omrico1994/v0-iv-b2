@@ -5,6 +5,8 @@ export async function POST(request: NextRequest) {
   try {
     const { token, email } = await request.json()
 
+    console.log("[v0] Validation request received:", { token, email })
+
     if (!token || !email) {
       return NextResponse.json({ valid: false, error: "Token and email are required" }, { status: 400 })
     }
@@ -17,6 +19,8 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    console.log("[v0] Querying database for invitation...")
+
     const { data: invitation, error: invitationError } = await supabase
       .from("user_invitations")
       .select("*")
@@ -24,6 +28,8 @@ export async function POST(request: NextRequest) {
       .eq("email", email)
       .in("status", ["pending", "sent"])
       .single()
+
+    console.log("[v0] Database query result:", { invitation, invitationError })
 
     if (invitationError || !invitation) {
       console.log("[v0] Invitation validation failed:", invitationError)
@@ -34,10 +40,13 @@ export async function POST(request: NextRequest) {
     const tokenAge = Date.now() - new Date(invitation.created_at).getTime()
     const maxAge = 24 * 60 * 60 * 1000 // 24 hours
 
+    console.log("[v0] Token age check:", { tokenAge, maxAge, expired: tokenAge > maxAge })
+
     if (tokenAge > maxAge) {
       return NextResponse.json({ valid: false, error: "Invitation has expired" }, { status: 410 })
     }
 
+    console.log("[v0] Invitation validation successful")
     return NextResponse.json({ valid: true, invitation })
   } catch (error) {
     console.error("[v0] Invitation validation error:", error)
