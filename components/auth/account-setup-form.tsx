@@ -20,140 +20,97 @@ export function AccountSetupForm() {
   const [isPasswordReset, setIsPasswordReset] = useState(false)
   const [isLinkExpired, setIsLinkExpired] = useState(false)
   const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [isInitialized, setIsInitialized] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
 
   useEffect(() => {
-    const extractTokensFromUrl = () => {
-      console.log("[v0] === COMPREHENSIVE URL DEBUG ===")
-      console.log("[v0] Full URL:", window.location.href)
-      console.log("[v0] Pathname:", window.location.pathname)
-      console.log("[v0] Search params:", window.location.search)
-      console.log("[v0] Hash:", window.location.hash)
-      console.log("[v0] Host:", window.location.host)
+    startTransition(() => {
+      const initializeAuth = async () => {
+        try {
+          console.log("[v0] === COMPREHENSIVE URL DEBUG ===")
+          console.log("[v0] Full URL:", window.location.href)
+          console.log("[v0] Hash:", window.location.hash)
+          console.log("[v0] Host:", window.location.host)
 
-      const urlSearchParams = new URLSearchParams(window.location.search)
-      console.log("[v0] All search params:")
-      for (const [key, value] of urlSearchParams.entries()) {
-        console.log(`[v0]   ${key}: ${value}`)
-      }
+          const urlSearchParams = new URLSearchParams(window.location.search)
+          const hash = window.location.hash.substring(1)
+          const hashParams = new URLSearchParams(hash)
 
-      const hash = window.location.hash.substring(1)
-      const hashParams = new URLSearchParams(hash)
-      console.log("[v0] All hash params:")
-      for (const [key, value] of hashParams.entries()) {
-        console.log(`[v0]   ${key}: ${value}`)
-      }
+          const errorCode = urlSearchParams.get("error_code") || hashParams.get("error_code")
+          const errorDescription = urlSearchParams.get("error_description") || hashParams.get("error_description")
 
-      const errorCode = urlSearchParams.get("error_code") || hashParams.get("error_code")
-      const errorDescription = urlSearchParams.get("error_description") || hashParams.get("error_description")
-
-      if (errorCode === "otp_expired" || errorDescription?.includes("expired")) {
-        console.log("[v0] Detected expired reset link")
-        setIsLinkExpired(true)
-        setError("This reset link has expired. Please request a new one.")
-        return { type: null, accessToken: null, refreshToken: null }
-      }
-
-      let type = searchParams.get("type")
-      let accessToken = searchParams.get("access_token")
-      let refreshToken = searchParams.get("refresh_token")
-
-      console.log(
-        "[v0] From search params - type:",
-        type,
-        "access_token:",
-        !!accessToken,
-        "refresh_token:",
-        !!refreshToken,
-      )
-
-      if (!accessToken || !refreshToken) {
-        type = type || hashParams.get("type")
-        accessToken = accessToken || hashParams.get("access_token")
-        refreshToken = refreshToken || hashParams.get("refresh_token")
-
-        console.log("[v0] From hash - type:", type, "access_token:", !!accessToken, "refresh_token:", !!refreshToken)
-
-        if (!accessToken) {
-          accessToken =
-            hashParams.get("token") ||
-            hashParams.get("access-token") ||
-            hashParams.get("accessToken") ||
-            hashParams.get("auth_token") ||
-            hashParams.get("authToken")
-        }
-        if (!refreshToken) {
-          refreshToken =
-            hashParams.get("refresh-token") ||
-            hashParams.get("refreshToken") ||
-            hashParams.get("refresh_token") ||
-            hashParams.get("rt")
-        }
-
-        console.log("[v0] After alternative names - access_token:", !!accessToken, "refresh_token:", !!refreshToken)
-      }
-
-      return { type, accessToken, refreshToken }
-    }
-
-    const { type, accessToken, refreshToken } = extractTokensFromUrl()
-
-    if (isLinkExpired) {
-      return
-    }
-
-    console.log("[v0] Setup form params:", { type, hasAccessToken: !!accessToken, hasRefreshToken: !!refreshToken })
-
-    const supabase = createClient()
-
-    if (type === "recovery" && accessToken) {
-      console.log("[v0] Handling password reset flow - token will be validated during password update")
-      setIsPasswordReset(true)
-      setError(null)
-      // Don't try to validate the recovery token here, it will be used directly in updateUser
-    } else if ((type === "signup" || type === "invite") && accessToken && refreshToken) {
-      // Handle invitation flows that have both tokens
-      setIsPasswordReset(false)
-      supabase.auth
-        .setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken,
-        })
-        .then(({ error }) => {
-          if (error) {
-            console.log("[v0] Session set error:", error)
-            setError("Failed to authenticate. Please try clicking the invitation link again.")
-          } else {
-            console.log("[v0] Session set successfully for invitation")
-            setError(null)
+          if (errorCode === "otp_expired" || errorDescription?.includes("expired")) {
+            console.log("[v0] Detected expired reset link")
+            setIsLinkExpired(true)
+            setError("This reset link has expired. Please request a new one.")
+            setIsInitialized(true)
+            return
           }
-        })
-        .catch((err) => {
-          console.log("[v0] Session set catch error:", err)
-          setError("Failed to authenticate. Please try again.")
-        })
-    } else {
-      // Check for existing session
-      supabase.auth
-        .getSession()
-        .then(({ data: { session }, error }) => {
-          if (session && session.user) {
-            console.log("[v0] Found existing session for user:", session.user.email)
+
+          let type = searchParams.get("type")
+          let accessToken = searchParams.get("access_token")
+          let refreshToken = searchParams.get("refresh_token")
+
+          if (!accessToken || !refreshToken) {
+            type = type || hashParams.get("type")
+            accessToken = accessToken || hashParams.get("access_token")
+            refreshToken = refreshToken || hashParams.get("refresh_token")
+          }
+
+          console.log("[v0] Setup form params:", {
+            type,
+            hasAccessToken: !!accessToken,
+            hasRefreshToken: !!refreshToken,
+          })
+
+          const supabase = createClient()
+
+          if (type === "recovery" && accessToken) {
+            console.log("[v0] Handling password reset flow")
             setIsPasswordReset(true)
-            setUserEmail(session.user.email)
             setError(null)
+          } else if ((type === "signup" || type === "invite") && accessToken && refreshToken) {
+            setIsPasswordReset(false)
+            const { error: sessionError } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            })
+
+            if (sessionError) {
+              console.log("[v0] Session set error:", sessionError)
+              setError("Failed to authenticate. Please try clicking the invitation link again.")
+            } else {
+              console.log("[v0] Session set successfully for invitation")
+              setError(null)
+            }
           } else {
-            console.log("[v0] No valid tokens found and no existing session")
-            setError("Auth session missing!")
+            const {
+              data: { session },
+              error: sessionError,
+            } = await supabase.auth.getSession()
+
+            if (session && session.user) {
+              console.log("[v0] Found existing session for user:", session.user.email)
+              setIsPasswordReset(true)
+              setUserEmail(session.user.email)
+              setError(null)
+            } else {
+              console.log("[v0] No valid tokens found and no existing session")
+              setError("Auth session missing!")
+            }
           }
-        })
-        .catch((err) => {
-          console.log("[v0] Get session error:", err)
-          setError("Failed to check authentication status.")
-        })
-    }
-  }, [searchParams, isLinkExpired])
+        } catch (err) {
+          console.log("[v0] Auth initialization error:", err)
+          setError("Failed to initialize authentication.")
+        } finally {
+          setIsInitialized(true)
+        }
+      }
+
+      initializeAuth()
+    })
+  }, [searchParams])
 
   const handleRequestNewLink = () => {
     startTransition(async () => {
@@ -208,7 +165,6 @@ export function AccountSetupForm() {
         } = await supabase.auth.getSession()
 
         if (!session && isPasswordReset) {
-          // Extract token again for password update
           const urlSearchParams = new URLSearchParams(window.location.search)
           const hashParams = new URLSearchParams(window.location.hash.substring(1))
           const accessToken = urlSearchParams.get("access_token") || hashParams.get("access_token")
@@ -217,12 +173,11 @@ export function AccountSetupForm() {
             console.log("[v0] Using recovery token for password update")
             const { error: sessionError } = await supabase.auth.setSession({
               access_token: accessToken,
-              refresh_token: "", // Recovery tokens don't need refresh token
+              refresh_token: "",
             })
 
             if (sessionError) {
               console.log("[v0] Session set error with recovery token:", sessionError)
-              // Try direct password update with recovery token
               const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/user`, {
                 method: "PUT",
                 headers: {
@@ -238,11 +193,9 @@ export function AccountSetupForm() {
                 updateError = new Error(errorData.message || "Failed to update password")
               } else {
                 console.log("[v0] Password reset successful via direct API call")
-                // Refresh the session after password update
                 await supabase.auth.refreshSession()
               }
             } else {
-              // Session set successfully, now update password normally
               const response = await supabase.auth.updateUser({ password })
               updateError = response.error
             }
@@ -299,6 +252,19 @@ export function AccountSetupForm() {
         setError("An unexpected error occurred")
       }
     })
+  }
+
+  if (!isInitialized) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-8">
+          <div className="flex items-center space-x-2">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Initializing...</span>
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
   if (isLinkExpired) {
