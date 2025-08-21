@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
       .select("*")
       .eq("invitation_token", token)
       .eq("email", email)
-      .eq("status", "pending")
+      .in("status", ["pending", "sent"])
       .single()
 
     if (invitationError || !invitation) {
