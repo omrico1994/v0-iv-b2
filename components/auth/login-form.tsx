@@ -1,5 +1,7 @@
 "use client"
 import { signIn } from "@/lib/actions"
+import type React from "react"
+
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -11,8 +13,15 @@ function LoginFormContent() {
   const searchParams = useSearchParams()
   const error = searchParams.get("error")
 
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    console.log("[v0] Login form submitted at:", new Date().toISOString())
+    const formData = new FormData(event.currentTarget)
+    console.log("[v0] Email:", formData.get("email"))
+    console.log("[v0] Form action will call signIn server action")
+  }
+
   return (
-    <form action={signIn} className="space-y-4">
+    <form action={signIn} onSubmit={handleSubmit} className="space-y-4">
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
