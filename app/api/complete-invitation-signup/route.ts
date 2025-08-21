@@ -50,21 +50,53 @@ export async function POST(request: NextRequest) {
 
     console.log("[v0] Creating user with admin API...")
 
-    const { data: authData, error: signUpError } = await supabaseAdmin.auth.admin.createUser({
-      email: email,
-      password: password,
-      email_confirm: true, // Automatically confirm email for invitation flows
-      user_metadata: {
-        invitation_token: token,
-        role: invitation.role,
-      },
-    })
+    const { data: existingUser } = await supabaseAdmin.auth.admin.getUserByEmail(email)
 
-    console.log("[v0] User creation result:", { authData: !!authData?.user, signUpError })
+    let authData
+    if (existingUser?.user) {
+      console.log("[v0] User already exists, updating password...")
 
-    if (signUpError || !authData.user) {
-      console.log("[v0] User creation failed:", signUpError)
-      return NextResponse.json({ error: signUpError?.message || "Failed to create user" }, { status: 400 })
+      // Update existing user's password
+      const { data: updateData, error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+        existingUser.user.id,
+        {
+          password: password,
+          email_confirm: true,
+          user_metadata: {
+            ...existingUser.user.user_metadata,
+            invitation_token: token,
+            role: invitation.role,
+          },
+        },
+      )
+
+      if (updateError) {
+        console.log("[v0] User update failed:", updateError)
+        return NextResponse.json({ error: updateError.message || "Failed to update user" }, { status: 400 })
+      }
+
+      authData = { user: updateData.user }
+      console.log("[v0] User password updated successfully")
+    } else {
+      console.log("[v0] Creating new user...")
+
+      const { data: createData, error: signUpError } = await supabaseAdmin.auth.admin.createUser({
+        email: email,
+        password: password,
+        email_confirm: true,
+        user_metadata: {
+          invitation_token: token,
+          role: invitation.role,
+        },
+      })
+
+      if (signUpError || !createData.user) {
+        console.log("[v0] User creation failed:", signUpError)
+        return NextResponse.json({ error: signUpError?.message || "Failed to create user" }, { status: 400 })
+      }
+
+      authData = createData
+      console.log("[v0] New user created successfully")
     }
 
     console.log("[v0] Updating user profile...")
