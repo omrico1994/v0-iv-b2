@@ -614,13 +614,13 @@ export async function resendInvitation(userId: string) {
 
     const { data: invitation, error: invitationError } = await supabase
       .from("user_invitations")
-      .select("invitation_token")
+      .select("invitation_token, status")
       .eq("email", user.user.email)
-      .eq("status", "pending")
+      .in("status", ["pending", "sent"])
       .single()
 
     if (invitationError || !invitation) {
-      console.log("[v0] No pending invitation found:", invitationError)
+      console.log("[v0] No resendable invitation found:", invitationError)
       return { error: "No pending invitation found for this user" }
     }
 
