@@ -1,14 +1,14 @@
 import { Resend } from "resend"
-import { createClient } from "@/lib/supabase/server"
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
 interface SendInvitationEmailParams {
   email: string
+  firstName: string
+  lastName: string
   role: string
+  businessName?: string
   invitationToken: string
-  retailerName?: string
-  locationName?: string
 }
 
 interface EmailResult {
@@ -17,31 +17,119 @@ interface EmailResult {
   error?: string
 }
 
+function getEmailTemplate(
+  role: string,
+  firstName: string,
+  lastName: string,
+  businessName: string,
+  invitationToken: string,
+) {
+  const setupUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "https://app.iv-relife.com"}/auth/setup-account?token=${invitationToken}&type=invitation`
+
+  const roleColors = {
+    admin: "#dc2626",
+    office: "#2563eb",
+    retailer: "#059669",
+    location: "#7c3aed",
+  }
+
+  const color = roleColors[role as keyof typeof roleColors] || "#6b7280"
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Account Setup Invitation</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, ${color} 0%, ${color}dd 100%); padding: 30px; border-radius: 10px; text-align: center; margin-bottom: 30px;">
+          <h1 style="color: white; margin: 0; font-size: 28px;">Welcome to IV Relife</h1>
+          <p style="color: white; margin: 10px 0 0 0; opacity: 0.9;">You've been invited as a ${role}</p>
+        </div>
+        
+        <div style="background: #f8f9fa; padding: 25px; border-radius: 8px; margin-bottom: 25px;">
+          <h2 style="color: ${color}; margin-top: 0;">Hello ${firstName} ${lastName}!</h2>
+          <p>You've been invited to join <strong>${businessName}</strong> as a <strong>${role}</strong>.</p>
+          <p>Click the button below to set up your account and get started:</p>
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${setupUrl}" style="background: ${color}; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Set Up Your Account</a>
+        </div>
+        
+        <div style="border-top: 1px solid #eee; padding-top: 20px; margin-top: 30px; font-size: 14px; color: #666;">
+          <p>If the button doesn't work, copy and paste this link into your browser:</p>
+          <p style="word-break: break-all; background: #f5f5f5; padding: 10px; border-radius: 4px;">${setupUrl}</p>
+          <p style="margin-top: 20px;">If you didn't expect this invitation, you can safely ignore this email.</p>
+        </div>
+      </body>
+    </html>
+  `
+}
+
 export async function sendInvitationEmail(params: SendInvitationEmailParams): Promise<EmailResult> {
-  console.log("[v0] Resend service - sendInvitationEmail called with:", {
-    email: params.email,
-    role: params.role,
-    hasToken: !!params.invitationToken,
-    retailerName: params.retailerName,
-    locationName: params.locationName,
-  })
-
-  console.log("[v0] Resend API Key exists:", !!process.env.RESEND_API_KEY)
-  console.log("[v0] Resend API Key length:", process.env.RESEND_API_KEY?.length || 0)
-
   try {
-    const setupUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "https://app.iv-relife.com"}/auth/setup-account?token=${params.invitationToken}`
+    console.log("[v0] Sending invitation email with params:", {
+      email: params.email,
+      role: params.role,
+      businessName: params.businessName,
+    })
 
-    console.log("[v0] Setup URL generated:", setupUrl)
-
-    const roleColors = {
-      admin: "#dc2626",
-      office: "#2563eb",
-      retailer: "#059669",
-      location: "#7c3aed",
+    if (!process.env.RESEND_API_KEY) {
+      console.error("[v0] RESEND_API_KEY is not configured")
+      return { success: false, error: "Email service not configured" }
     }
 
-    const roleColor = roleColors[params.role as keyof typeof roleColors] || "#6b7280"
+    const emailHtml = getEmailTemplate(
+      params.role,
+      params.firstName,
+      params.lastName,
+      params.businessName || "IV Relife",
+      params.invitationToken,
+    )
+
+    const result = await resend.emails.send({
+      from: "IV Relife <noreply@iv-relife.com>",
+      to: [params.email],
+      subject: `Welcome to IV Relife - Set up your ${params.role} account`,
+      html: emailHtml,
+    })
+
+    console.log("[v0] Resend API response:", result)
+
+    if (result.data?.id) {
+      return {
+        success: true,
+        emailId: result.data.id,
+      }
+    } else {
+      console.error("[v0] Resend API error:", result.error)
+      return {
+        success: false,
+        error: result.error?.message || "Failed to send email",
+      }
+    }
+  } catch (error) {
+    console.error("[v0] Error sending invitation email:", error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    }
+  }
+}
+
+export async function sendPasswordResetEmail(email: string, firstName: string, lastName: string): Promise<EmailResult> {
+  try {
+    console.log("[v0] Sending password reset email to:", email)
+
+    if (!process.env.RESEND_API_KEY) {
+      console.error("[v0] RESEND_API_KEY is not configured")
+      return { success: false, error: "Email service not configured" }
+    }
+
+    const resetUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "https://app.iv-relife.com"}/auth/setup-account?type=recovery`
 
     const emailHtml = `
       <!DOCTYPE html>
@@ -49,98 +137,59 @@ export async function sendInvitationEmail(params: SendInvitationEmailParams): Pr
         <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Account Setup Invitation</title>
+          <title>Reset Your Password</title>
         </head>
-        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background: linear-gradient(135deg, ${roleColor} 0%, ${roleColor}dd 100%); padding: 30px; border-radius: 12px; text-align: center; margin-bottom: 30px;">
-            <h1 style="color: white; margin: 0; font-size: 28px; font-weight: 600;">Welcome to IV-Relife</h1>
-            <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">You've been invited as a ${params.role}</p>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: linear-gradient(135deg, #dc2626 0%, #dc2626dd 100%); padding: 30px; border-radius: 10px; text-align: center; margin-bottom: 30px;">
+            <h1 style="color: white; margin: 0; font-size: 28px;">Reset Your Password</h1>
+            <p style="color: white; margin: 10px 0 0 0; opacity: 0.9;">IV Relife Account</p>
           </div>
           
-          <div style="background: #f8fafc; padding: 25px; border-radius: 8px; margin-bottom: 25px;">
-            <h2 style="color: #1f2937; margin: 0 0 15px 0; font-size: 20px;">Account Details</h2>
-            <p style="margin: 8px 0; color: #4b5563;"><strong>Email:</strong> ${params.email}</p>
-            <p style="margin: 8px 0; color: #4b5563;"><strong>Role:</strong> ${params.role.charAt(0).toUpperCase() + params.role.slice(1)}</p>
-            ${params.retailerName ? `<p style="margin: 8px 0; color: #4b5563;"><strong>Retailer:</strong> ${params.retailerName}</p>` : ""}
-            ${params.locationName ? `<p style="margin: 8px 0; color: #4b5563;"><strong>Location:</strong> ${params.locationName}</p>` : ""}
+          <div style="background: #f8f9fa; padding: 25px; border-radius: 8px; margin-bottom: 25px;">
+            <h2 style="color: #dc2626; margin-top: 0;">Hello ${firstName} ${lastName}!</h2>
+            <p>We received a request to reset your password for your IV Relife account.</p>
+            <p>Click the button below to set a new password:</p>
           </div>
-
+          
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${setupUrl}" style="background: ${roleColor}; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px; display: inline-block;">Complete Account Setup</a>
+            <a href="${resetUrl}" style="background: #dc2626; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Reset Password</a>
           </div>
-
-          <div style="background: #fef3c7; border: 1px solid #fbbf24; padding: 15px; border-radius: 6px; margin: 20px 0;">
-            <p style="margin: 0; color: #92400e; font-size: 14px;"><strong>Important:</strong> This invitation link will expire in 24 hours. Please complete your account setup as soon as possible.</p>
-          </div>
-
-          <div style="border-top: 1px solid #e5e7eb; padding-top: 20px; margin-top: 30px; text-align: center;">
-            <p style="color: #6b7280; font-size: 14px; margin: 0;">If you didn't expect this invitation, please ignore this email.</p>
-            <p style="color: #6b7280; font-size: 12px; margin: 10px 0 0 0;">© 2024 IV-Relife. All rights reserved.</p>
+          
+          <div style="border-top: 1px solid #eee; padding-top: 20px; margin-top: 30px; font-size: 14px; color: #666;">
+            <p>If the button doesn't work, copy and paste this link into your browser:</p>
+            <p style="word-break: break-all; background: #f5f5f5; padding: 10px; border-radius: 4px;">${resetUrl}</p>
+            <p style="margin-top: 20px;">If you didn't request this password reset, you can safely ignore this email.</p>
           </div>
         </body>
       </html>
     `
 
-    console.log("[v0] About to send email via Resend...")
-
     const result = await resend.emails.send({
-      from: "IV-Relife <noreply@iv-relife.com>",
-      to: [params.email],
-      subject: `Welcome to IV-Relife - Complete Your ${params.role} Account Setup`,
+      from: "IV Relife <noreply@iv-relife.com>",
+      to: [email],
+      subject: "Reset your IV Relife password",
       html: emailHtml,
     })
 
-    console.log("[v0] Resend API response:", result)
+    console.log("[v0] Password reset email response:", result)
 
-    if (result.error) {
+    if (result.data?.id) {
+      return {
+        success: true,
+        emailId: result.data.id,
+      }
+    } else {
       console.error("[v0] Resend API error:", result.error)
       return {
         success: false,
-        error: result.error.message || "Failed to send email",
+        error: result.error?.message || "Failed to send email",
       }
     }
-
-    console.log("[v0] Email sent successfully, ID:", result.data?.id)
-
-    return {
-      success: true,
-      emailId: result.data?.id,
-    }
   } catch (error) {
-    console.error("[v0] Resend service error:", error)
+    console.error("[v0] Error sending password reset email:", error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Unknown error occurred",
-    }
-  }
-}
-
-export async function sendPasswordResetEmail(email: string): Promise<EmailResult> {
-  console.log("[v0] Resend service - sendPasswordResetEmail called for:", email)
-
-  try {
-    const supabase = createClient()
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || "https://app.iv-relife.com"}/auth/setup-account`,
-    })
-
-    if (error) {
-      console.error("[v0] Supabase password reset error:", error)
-      return {
-        success: false,
-        error: error.message,
-      }
-    }
-
-    console.log("[v0] Password reset email sent successfully")
-    return {
-      success: true,
-    }
-  } catch (error) {
-    console.error("[v0] Password reset error:", error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error occurred",
+      error: error instanceof Error ? error.message : "Unknown error",
     }
   }
 }
