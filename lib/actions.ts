@@ -17,29 +17,18 @@ export async function signIn(formData: FormData) {
   const supabase = createClient()
 
   try {
-    console.log("[v0] Starting account lock check...")
+    console.log("[v0] Starting authentication process...")
 
-    // First, get user by email to check if account is locked
-    const { data: authUsers, error: listError } = await supabase.auth.admin.listUsers()
-
-    if (listError) {
-      console.log("[v0] Error listing users:", listError)
-    }
-
+    // Check account lock status first
+    const { data: authUsers } = await supabase.auth.admin.listUsers()
     const existingUser = authUsers?.users.find((u) => u.email === email)
-    console.log("[v0] Found existing user:", !!existingUser)
 
     if (existingUser) {
-      console.log("[v0] Checking user profile for locks...")
-      const { data: profile, error: profileError } = await supabase
+      const { data: profile } = await supabase
         .from("user_profiles")
         .select("failed_login_attempts, locked_until")
         .eq("id", existingUser.id)
         .single()
-
-      if (profileError) {
-        console.log("[v0] Profile query error:", profileError)
-      }
 
       // Check if account is locked
       if (profile?.locked_until && new Date(profile.locked_until) > new Date()) {
@@ -49,6 +38,7 @@ export async function signIn(formData: FormData) {
       }
     }
 
+    // Attempt authentication
     console.log("[v0] Attempting sign in with password...")
     const { data: authData, error } = await supabase.auth.signInWithPassword({
       email,
@@ -63,50 +53,52 @@ export async function signIn(formData: FormData) {
 
     console.log("[v0] Sign in successful, user ID:", authData.user?.id)
 
+    // Authentication succeeded - redirect to dashboard immediately
+    // Handle profile updates in background without blocking redirect
     if (authData.user) {
-      // Update profile in background - don't let errors here affect successful login
-      try {
-        console.log("[v0] Updating user profile after successful login...")
-        const { error: updateError } = await supabase
-          .from("user_profiles")
-          .update({
-            last_login_at: new Date().toISOString(),
-            failed_login_attempts: 0, // Reset failed attempts on successful login
-            locked_until: null, // Clear any existing lock
-          })
-          .eq("id", authData.user.id)
-
-        if (updateError) {
-          console.log("[v0] Profile update error (non-blocking):", updateError)
-        }
-
-        console.log("[v0] Checking email verification status...")
-        const { data: userProfile, error: verifyError } = await supabase
-          .from("user_profiles")
-          .select("email_verified_at")
-          .eq("id", authData.user.id)
-          .single()
-
-        if (verifyError) {
-          console.log("[v0] Email verification check error (non-blocking):", verifyError)
-        }
-
-        if (!userProfile?.email_verified_at) {
-          console.log("[v0] Email not verified, redirecting to verification page")
-          redirect("/auth/verify-email?message=Please verify your email before continuing")
-        }
-      } catch (profileError) {
-        // Profile errors shouldn't prevent successful login
-        console.log("[v0] Profile update error (non-blocking):", profileError)
-      }
+      // Fire and forget profile updates - don't await or catch errors
+      updateUserProfileAfterLogin(authData.user.id, authData.user.email).catch((error) => {
+        console.log("[v0] Background profile update error (non-blocking):", error)
+      })
     }
 
     console.log("[v0] Authentication complete, redirecting to dashboard")
     redirect("/dashboard")
   } catch (error) {
-    // Only catch errors that happen before successful authentication
     console.error("[v0] Sign in authentication error:", error)
     redirect("/auth/login?error=Authentication failed. Please try again.")
+  }
+}
+
+async function updateUserProfileAfterLogin(userId: string, email: string | undefined) {
+  const supabase = createClient()
+
+  try {
+    console.log("[v0] Updating user profile after successful login...")
+
+    // Update login tracking
+    await supabase
+      .from("user_profiles")
+      .update({
+        last_login_at: new Date().toISOString(),
+        failed_login_attempts: 0,
+        locked_until: null,
+      })
+      .eq("id", userId)
+
+    // Check email verification - redirect if needed
+    const { data: userProfile } = await supabase
+      .from("user_profiles")
+      .select("email_verified_at")
+      .eq("id", userId)
+      .single()
+
+    if (!userProfile?.email_verified_at) {
+      console.log("[v0] Email not verified - user will be prompted on dashboard")
+      // Don't redirect here - let the dashboard handle email verification prompts
+    }
+  } catch (error) {
+    console.log("[v0] Profile update error (non-blocking):", error)
   }
 }
 
@@ -117,46 +109,31 @@ async function trackFailedLogin(email: string) {
     console.log("[v0] Tracking failed login for email:", email)
 
     // Get user by email from auth
-    const { data: authUsers, error: listError } = await supabase.auth.admin.listUsers()
-
-    if (listError) {
-      console.log("[v0] Error listing users:", listError)
-    }
-
+    const { data: authUsers } = await supabase.auth.admin.listUsers()
     const user = authUsers?.users.find((u) => u.email === email)
-    console.log("[v0] Found user:", !!user)
 
-    if (!user) return // User doesn't exist, don't track
+    if (user) {
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("failed_login_attempts")
+        .eq("id", user.id)
+        .single()
 
-    // Get current failed attempts
-    const { data: profile, error: profileError } = await supabase
-      .from("user_profiles")
-      .select("failed_login_attempts")
-      .eq("id", user.id)
-      .single()
+      const currentAttempts = (profile?.failed_login_attempts || 0) + 1
+      const maxAttempts = 5 // Lock after 5 failed attempts
 
-    if (profileError) {
-      console.log("[v0] Profile query error:", profileError)
-    }
+      const updateData: any = {
+        failed_login_attempts: currentAttempts,
+      }
 
-    const currentAttempts = (profile?.failed_login_attempts || 0) + 1
-    const maxAttempts = 5 // Lock after 5 failed attempts
+      // Lock account if max attempts reached
+      if (currentAttempts >= maxAttempts) {
+        const lockDuration = 30 * 60 * 1000 // 30 minutes
+        updateData.locked_until = new Date(Date.now() + lockDuration).toISOString()
+      }
 
-    const updateData: any = {
-      failed_login_attempts: currentAttempts,
-    }
-
-    // Lock account if max attempts reached
-    if (currentAttempts >= maxAttempts) {
-      const lockDuration = 30 * 60 * 1000 // 30 minutes
-      updateData.locked_until = new Date(Date.now() + lockDuration).toISOString()
-    }
-
-    console.log("[v0] Updating failed login attempts...")
-    const { error: updateError } = await supabase.from("user_profiles").update(updateData).eq("id", user.id)
-
-    if (updateError) {
-      console.log("[v0] Failed login update error:", updateError)
+      console.log("[v0] Updating failed login attempts...")
+      await supabase.from("user_profiles").update(updateData).eq("id", user.id)
     }
   } catch (error) {
     console.error("[v0] Error tracking failed login:", error)
