@@ -206,52 +206,43 @@ export function AccountSetupForm() {
         if (isInvitationFlow && invitationToken && userEmail) {
           console.log("[v0] Processing invitation signup")
 
-          const { data: authData, error: signUpError } = await supabase.auth.signUp({
-            email: userEmail,
-            password: password,
-            options: {
-              emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || window.location.origin,
+          const response = await fetch("/api/complete-invitation-signup", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
             },
+            body: JSON.stringify({
+              token: invitationToken,
+              email: userEmail,
+              password: password,
+            }),
           })
 
-          if (signUpError) {
-            console.log("[v0] Signup error:", signUpError)
-            setError(signUpError.message)
+          const result = await response.json()
+
+          if (!response.ok) {
+            console.log("[v0] Invitation signup error:", result.error)
+            setError(result.error || "Failed to complete account setup")
             return
           }
 
-          if (authData.user) {
-            const { error: profileError } = await supabase
-              .from("user_profiles")
-              .update({
-                email_verified_at: new Date().toISOString(),
-                last_login_at: new Date().toISOString(),
-              })
-              .eq("user_id", authData.user.id)
+          console.log("[v0] Invitation signup successful, signing in user...")
 
-            if (profileError) {
-              console.log("[v0] Profile update error:", profileError)
-            }
+          const { error: signInError } = await supabase.auth.signInWithPassword({
+            email: userEmail,
+            password: password,
+          })
 
-            const { error: invitationError } = await supabase
-              .from("user_invitations")
-              .update({
-                status: "accepted",
-                accepted_at: new Date().toISOString(),
-              })
-              .eq("invitation_token", invitationToken)
-
-            if (invitationError) {
-              console.log("[v0] Invitation update error:", invitationError)
-            }
-
-            console.log("[v0] Invitation signup successful")
-            router.push("/dashboard")
+          if (signInError) {
+            console.log("[v0] Auto sign-in error:", signInError)
+            router.push("/auth/login?message=Account created successfully. Please sign in.")
             return
           }
+
+          console.log("[v0] User signed in successfully, redirecting to:", result.redirectUrl)
+          router.push(result.redirectUrl || "/dashboard")
+          return
         }
-
-        console.log("[v0] Attempting password update, isPasswordReset:", isPasswordReset)
 
         let updateError
         const {
