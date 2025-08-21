@@ -1,5 +1,4 @@
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
-import { cookies } from "next/headers"
+import { createClient } from "@supabase/supabase-js"
 import { type NextRequest, NextResponse } from "next/server"
 
 export async function POST(request: NextRequest) {
@@ -9,8 +8,12 @@ export async function POST(request: NextRequest) {
     const { email, password } = await request.json()
     console.log("[v0] Test API: Received data:", { email, passwordLength: password?.length })
 
-    // Use service role client for admin operations
-    const supabaseAdmin = createRouteHandlerClient({ cookies })
+    const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    })
 
     // Create user with admin API
     console.log("[v0] Test API: Creating user with admin API")
