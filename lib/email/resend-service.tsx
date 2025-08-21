@@ -2,17 +2,18 @@ import { Resend } from "resend"
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
-interface EmailTemplate {
-  subject: string
-  html: string
-}
-
 interface SendInvitationEmailParams {
   email: string
-  role: string
+  role: "admin" | "office" | "retailer" | "location"
   invitationToken: string
   invitedBy: string
   retailerName?: string
+}
+
+interface SendPasswordResetEmailParams {
+  to: string
+  resetUrl: string
+  userName: string
 }
 
 interface EmailResult {
@@ -21,9 +22,105 @@ interface EmailResult {
   error?: string
 }
 
-function getEmailTemplate(role: string, invitationToken: string, retailerName?: string): EmailTemplate {
-  const setupUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "https://app.iv-relife.com"}/auth/setup-account?token=${invitationToken}&type=invitation`
+export async function sendInvitationEmail(params: SendInvitationEmailParams): Promise<EmailResult> {
+  try {
+    console.log("[v0] Sending invitation email to:", params.email)
 
+    if (!process.env.RESEND_API_KEY) {
+      console.error("[v0] RESEND_API_KEY not configured")
+      return { success: false, error: "Email service not configured" }
+    }
+
+    const setupUrl = `${process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"}/auth/setup-account?token=${params.invitationToken}&email=${encodeURIComponent(params.email)}&type=invitation`
+
+    const roleDisplayName = {
+      admin: "Administrator",
+      office: "Office Staff",
+      retailer: "Retailer",
+      location: "Location Staff",
+    }[params.role]
+
+    const emailTemplate = getInvitationEmailTemplate({
+      role: params.role,
+      roleDisplayName,
+      invitedBy: params.invitedBy,
+      retailerName: params.retailerName,
+      setupUrl,
+    })
+
+    const { data, error } = await resend.emails.send({
+      from: "IV Relife <noreply@iv-relife.com>",
+      to: [params.email],
+      subject: `Welcome to IV Relife - Complete Your ${roleDisplayName} Account Setup`,
+      html: emailTemplate,
+    })
+
+    if (error) {
+      console.error("[v0] Resend error:", error)
+      return { success: false, error: error.message || "Failed to send email" }
+    }
+
+    console.log("[v0] Email sent successfully:", data?.id)
+    return { success: true, emailId: data?.id }
+  } catch (error) {
+    console.error("[v0] Error sending invitation email:", error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error occurred",
+    }
+  }
+}
+
+export async function sendPasswordResetEmail(params: SendPasswordResetEmailParams): Promise<EmailResult> {
+  try {
+    console.log("[v0] Sending password reset email to:", params.to)
+
+    if (!process.env.RESEND_API_KEY) {
+      console.error("[v0] RESEND_API_KEY not configured")
+      return { success: false, error: "Email service not configured" }
+    }
+
+    const emailTemplate = getPasswordResetEmailTemplate({
+      userName: params.userName,
+      resetUrl: params.resetUrl,
+    })
+
+    const { data, error } = await resend.emails.send({
+      from: "IV Relife <noreply@iv-relife.com>",
+      to: [params.to],
+      subject: "Complete Your Account Setup - IV Relife",
+      html: emailTemplate,
+    })
+
+    if (error) {
+      console.error("[v0] Resend error:", error)
+      return { success: false, error: error.message || "Failed to send email" }
+    }
+
+    console.log("[v0] Password reset email sent successfully:", data?.id)
+    return { success: true, emailId: data?.id }
+  } catch (error) {
+    console.error("[v0] Error sending password reset email:", error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error occurred",
+    }
+  }
+}
+
+function getInvitationEmailTemplate({
+  role,
+  roleDisplayName,
+  invitedBy,
+  retailerName,
+  setupUrl,
+}: {
+  role: string
+  roleDisplayName: string
+  invitedBy: string
+  retailerName?: string
+  setupUrl: string
+}) {
   const roleColors = {
     admin: "#dc2626", // red-600
     office: "#2563eb", // blue-600
@@ -31,220 +128,113 @@ function getEmailTemplate(role: string, invitationToken: string, retailerName?: 
     location: "#7c3aed", // violet-600
   }
 
-  const roleDescriptions = {
-    admin: "system administrator with full access",
-    office: "office staff member with management access",
-    retailer: `retailer partner${retailerName ? ` for ${retailerName}` : ""}`,
-    location: `location manager${retailerName ? ` for ${retailerName}` : ""}`,
-  }
+  const roleColor = roleColors[role as keyof typeof roleColors] || "#6b7280"
 
-  const color = roleColors[role as keyof typeof roleColors] || "#6b7280"
-  const description = roleDescriptions[role as keyof typeof roleDescriptions] || "team member"
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Welcome to IV Relife</title>
+    </head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #374151; max-width: 600px; margin: 0 auto; padding: 20px;">
+      
+      <div style="text-align: center; margin-bottom: 40px;">
+        <h1 style="color: #1f2937; font-size: 28px; margin-bottom: 8px;">Welcome to IV Relife</h1>
+        <div style="width: 60px; height: 4px; background: ${roleColor}; margin: 0 auto; border-radius: 2px;"></div>
+      </div>
 
-  return {
-    subject: `Complete Your Account Setup - ${role.charAt(0).toUpperCase() + role.slice(1)} Access`,
-    html: `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Complete Your Account Setup</title>
-        </head>
-        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f9fafb;">
-          <div style="max-width: 600px; margin: 0 auto; background-color: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); overflow: hidden;">
-            
-            <!-- Header -->
-            <div style="background: linear-gradient(135deg, ${color} 0%, ${color}dd 100%); padding: 40px 32px; text-align: center;">
-              <h1 style="margin: 0; color: white; font-size: 28px; font-weight: 700; letter-spacing: -0.025em;">
-                Welcome to IV Relife
-              </h1>
-              <p style="margin: 8px 0 0 0; color: rgba(255, 255, 255, 0.9); font-size: 16px;">
-                You've been invited as a ${description}
-              </p>
-            </div>
+      <div style="background: #f9fafb; padding: 30px; border-radius: 12px; border-left: 4px solid ${roleColor}; margin-bottom: 30px;">
+        <h2 style="color: #1f2937; margin-top: 0; font-size: 20px;">You've been invited as ${roleDisplayName}</h2>
+        <p style="margin-bottom: 0; color: #6b7280;">
+          ${invitedBy} has invited you to join IV Relife${retailerName ? ` for ${retailerName}` : ""}.
+        </p>
+      </div>
 
-            <!-- Content -->
-            <div style="padding: 40px 32px;">
-              <div style="text-align: center; margin-bottom: 32px;">
-                <div style="display: inline-block; background-color: ${color}15; color: ${color}; padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 600; margin-bottom: 24px;">
-                  ${role.toUpperCase()} ACCESS
-                </div>
-                
-                <h2 style="margin: 0 0 16px 0; color: #111827; font-size: 24px; font-weight: 600;">
-                  Complete Your Account Setup
-                </h2>
-                
-                <p style="margin: 0 0 32px 0; color: #6b7280; font-size: 16px; line-height: 1.6;">
-                  Click the button below to set your password and complete your profile setup. This link will expire in 24 hours.
-                </p>
-              </div>
+      <div style="margin-bottom: 30px;">
+        <h3 style="color: #1f2937; font-size: 18px;">Complete Your Account Setup</h3>
+        <p>To get started, please click the button below to set your password and complete your profile:</p>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${setupUrl}" 
+             style="display: inline-block; background: ${roleColor}; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+            Complete Account Setup
+          </a>
+        </div>
+        
+        <p style="font-size: 14px; color: #6b7280;">
+          If the button doesn't work, copy and paste this link into your browser:<br>
+          <a href="${setupUrl}" style="color: ${roleColor}; word-break: break-all;">${setupUrl}</a>
+        </p>
+      </div>
 
-              <!-- CTA Button -->
-              <div style="text-align: center; margin: 32px 0;">
-                <a href="${setupUrl}" 
-                   style="display: inline-block; background-color: ${color}; color: white; text-decoration: none; padding: 16px 32px; border-radius: 8px; font-weight: 600; font-size: 16px; transition: all 0.2s;">
-                  Complete Account Setup
-                </a>
-              </div>
-
-              <!-- Alternative Link -->
-              <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e7eb;">
-                <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 14px;">
-                  If the button doesn't work, copy and paste this link into your browser:
-                </p>
-                <p style="margin: 0; word-break: break-all; color: ${color}; font-size: 14px;">
-                  ${setupUrl}
-                </p>
-              </div>
-
-              <!-- Footer -->
-              <div style="margin-top: 40px; padding-top: 24px; border-top: 1px solid #e5e7eb; text-align: center;">
-                <p style="margin: 0; color: #9ca3af; font-size: 14px;">
-                  If you didn't expect this invitation, you can safely ignore this email.
-                </p>
-              </div>
-            </div>
-          </div>
-        </body>
-      </html>
-    `,
-  }
+      <div style="border-top: 1px solid #e5e7eb; padding-top: 20px; font-size: 14px; color: #6b7280;">
+        <p><strong>What's next?</strong></p>
+        <ul style="margin: 10px 0; padding-left: 20px;">
+          <li>Set your secure password</li>
+          <li>Complete your profile information</li>
+          <li>Access your ${roleDisplayName.toLowerCase()} dashboard</li>
+        </ul>
+        
+        <p style="margin-top: 30px; font-size: 12px; color: #9ca3af;">
+          This invitation was sent by ${invitedBy}. If you didn't expect this invitation, you can safely ignore this email.
+        </p>
+      </div>
+    </body>
+    </html>
+  `
 }
 
-export async function sendInvitationEmail({
-  email,
-  role,
-  invitationToken,
-  invitedBy,
-  retailerName,
-}: SendInvitationEmailParams): Promise<EmailResult> {
-  try {
-    const template = getEmailTemplate(role, invitationToken, retailerName)
-
-    const { data, error } = await resend.emails.send({
-      from: "IV Relife <noreply@iv-relife.com>",
-      to: [email],
-      subject: template.subject,
-      html: template.html,
-    })
-
-    if (error) {
-      console.error("[v0] Resend email error:", error)
-      return {
-        success: false,
-        error: error.message || "Failed to send email",
-      }
-    }
-
-    return {
-      success: true,
-      emailId: data?.id,
-    }
-  } catch (error) {
-    console.error("[v0] Resend service error:", error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error occurred",
-    }
-  }
-}
-
-export async function sendPasswordResetEmail({
-  to,
-  resetUrl,
+function getPasswordResetEmailTemplate({
   userName,
+  resetUrl,
 }: {
-  to: string
-  resetUrl: string
   userName: string
-}): Promise<EmailResult> {
-  try {
-    const { data, error } = await resend.emails.send({
-      from: "IV Relife <noreply@iv-relife.com>",
-      to: [to],
-      subject: "Reset Your Password - IV Relife",
-      html: `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Reset Your Password</title>
-          </head>
-          <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f9fafb;">
-            <div style="max-width: 600px; margin: 0 auto; background-color: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); overflow: hidden;">
-              
-              <!-- Header -->
-              <div style="background: linear-gradient(135deg, #dc2626 0%, #dc2626dd 100%); padding: 40px 32px; text-align: center;">
-                <h1 style="margin: 0; color: white; font-size: 28px; font-weight: 700; letter-spacing: -0.025em;">
-                  Reset Your Password
-                </h1>
-                <p style="margin: 8px 0 0 0; color: rgba(255, 255, 255, 0.9); font-size: 16px;">
-                  Complete your account setup
-                </p>
-              </div>
+  resetUrl: string
+}) {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Complete Your Account Setup</title>
+    </head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #374151; max-width: 600px; margin: 0 auto; padding: 20px;">
+      
+      <div style="text-align: center; margin-bottom: 40px;">
+        <h1 style="color: #1f2937; font-size: 28px; margin-bottom: 8px;">Complete Your Account Setup</h1>
+        <div style="width: 60px; height: 4px; background: #2563eb; margin: 0 auto; border-radius: 2px;"></div>
+      </div>
 
-              <!-- Content -->
-              <div style="padding: 40px 32px;">
-                <div style="text-align: center; margin-bottom: 32px;">
-                  <h2 style="margin: 0 0 16px 0; color: #111827; font-size: 24px; font-weight: 600;">
-                    Hello ${userName}
-                  </h2>
-                  
-                  <p style="margin: 0 0 32px 0; color: #6b7280; font-size: 16px; line-height: 1.6;">
-                    Click the button below to set your password and complete your account setup. This link will expire in 24 hours.
-                  </p>
-                </div>
+      <div style="background: #f0f9ff; padding: 30px; border-radius: 12px; border-left: 4px solid #2563eb; margin-bottom: 30px;">
+        <h2 style="color: #1f2937; margin-top: 0; font-size: 20px;">Hello ${userName}</h2>
+        <p style="margin-bottom: 0; color: #6b7280;">
+          Please complete your account setup by setting your password.
+        </p>
+      </div>
 
-                <!-- CTA Button -->
-                <div style="text-align: center; margin: 32px 0;">
-                  <a href="${resetUrl}" 
-                     style="display: inline-block; background-color: #dc2626; color: white; text-decoration: none; padding: 16px 32px; border-radius: 8px; font-weight: 600; font-size: 16px; transition: all 0.2s;">
-                    Complete Account Setup
-                  </a>
-                </div>
+      <div style="margin-bottom: 30px;">
+        <p>Click the button below to set your password and access your account:</p>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${resetUrl}" 
+             style="display: inline-block; background: #2563eb; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+            Set Password
+          </a>
+        </div>
+        
+        <p style="font-size: 14px; color: #6b7280;">
+          If the button doesn't work, copy and paste this link into your browser:<br>
+          <a href="${resetUrl}" style="color: #2563eb; word-break: break-all;">${resetUrl}</a>
+        </p>
+      </div>
 
-                <!-- Alternative Link -->
-                <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e7eb;">
-                  <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 14px;">
-                    If the button doesn't work, copy and paste this link into your browser:
-                  </p>
-                  <p style="margin: 0; word-break: break-all; color: #dc2626; font-size: 14px;">
-                    ${resetUrl}
-                  </p>
-                </div>
-
-                <!-- Footer -->
-                <div style="margin-top: 40px; padding-top: 24px; border-top: 1px solid #e5e7eb; text-align: center;">
-                  <p style="margin: 0; color: #9ca3af; font-size: 14px;">
-                    If you didn't request this, you can safely ignore this email.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </body>
-        </html>
-      `,
-    })
-
-    if (error) {
-      console.error("[v0] Resend password reset email error:", error)
-      return {
-        success: false,
-        error: error.message || "Failed to send password reset email",
-      }
-    }
-
-    return {
-      success: true,
-      emailId: data?.id,
-    }
-  } catch (error) {
-    console.error("[v0] Resend password reset service error:", error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error occurred",
-    }
-  }
+      <div style="border-top: 1px solid #e5e7eb; padding-top: 20px; font-size: 12px; color: #9ca3af;">
+        <p>This link will expire in 24 hours for security reasons. If you didn't request this, you can safely ignore this email.</p>
+      </div>
+    </body>
+    </html>
+  `
 }
