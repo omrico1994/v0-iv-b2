@@ -364,6 +364,44 @@ export function AccountSetupForm() {
     })
   }
 
+  const handleTestAccountCreation = () => {
+    if (!userEmail || !password) {
+      setError("Email and password are required for testing")
+      return
+    }
+
+    startTransition(async () => {
+      try {
+        console.log("[v0] Testing account creation bypass...")
+
+        const response = await fetch("/api/test-account-creation", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: userEmail,
+            password: password,
+          }),
+        })
+
+        const result = await response.json()
+        console.log("[v0] Test API response:", result)
+
+        if (!response.ok) {
+          setError(`Test failed: ${result.error}`)
+          return
+        }
+
+        setError(null)
+        alert(`Test successful! User created with ID: ${result.userId}`)
+      } catch (error) {
+        console.log("[v0] Test error:", error)
+        setError("Test failed: Network error")
+      }
+    })
+  }
+
   if (!isInitialized) {
     return (
       <Card>
@@ -468,6 +506,19 @@ export function AccountSetupForm() {
             {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             {isInvitationFlow ? "Complete Setup" : isPasswordReset ? "Update Password" : "Complete Setup"}
           </Button>
+
+          {isInvitationFlow && userEmail && (
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+              onClick={handleTestAccountCreation}
+              disabled={isPending || !password || !confirmPassword}
+            >
+              {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Test Account Creation (Debug)
+            </Button>
+          )}
         </form>
       </CardContent>
     </Card>
