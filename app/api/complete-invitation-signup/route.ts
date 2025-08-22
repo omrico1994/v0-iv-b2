@@ -14,6 +14,40 @@ export async function POST(request: NextRequest) {
 
     const { token, email, password } = body
 
+    // TEMPORARY: Return what we received for debugging
+    return NextResponse.json({
+      debug: "API received data",
+      receivedFields: {
+        token: token ? `${token.substring(0, 20)}...` : token,
+        email: email,
+        password: password ? `[${password.length} chars]` : password,
+        tokenTruthy: !!token,
+        emailTruthy: !!email,
+        passwordTruthy: !!password,
+        tokenType: typeof token,
+        emailType: typeof email,
+        passwordType: typeof password,
+      },
+      rawBodyPreview: rawBody.substring(0, 200),
+    })
+
+    // TEMPORARY: Return what we received for debugging
+    // return NextResponse.json({
+    //   debug: "API received data",
+    //   receivedFields: {
+    //     token: token ? `${token.substring(0, 20)}...` : token,
+    //     email: email,
+    //     password: password ? `[${password.length} chars]` : password,
+    //     tokenTruthy: !!token,
+    //     emailTruthy: !!email,
+    //     passwordTruthy: !!password,
+    //     tokenType: typeof token,
+    //     emailType: typeof email,
+    //     passwordType: typeof password,
+    //   },
+    //   rawBodyPreview: rawBody.substring(0, 200),
+    // })
+
     console.log("[v0] Field extraction results:", {
       tokenExists: "token" in body,
       emailExists: "email" in body,
