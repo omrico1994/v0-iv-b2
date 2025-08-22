@@ -3,53 +3,19 @@ import { UserService } from "@/lib/services/user-service"
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("[v0] API endpoint hit - testing immediate response")
-
-    // Temporary test - return success immediately to verify API is reachable
-    return NextResponse.json({
-      test: "API is working",
-      timestamp: new Date().toISOString(),
-      headers: Object.fromEntries(request.headers.entries()),
-    })
-
-    console.log("[v0] Raw request received")
-    console.log("[v0] Request headers:", Object.fromEntries(request.headers.entries()))
-
     const body = await request.json()
-    console.log("[v0] Parsed request body:", body)
-    console.log("[v0] Body type:", typeof body)
-    console.log("[v0] Body keys:", Object.keys(body))
-
     const { token, email, password } = body
 
-    const validationDetails = {
+    console.log("[v0] Complete invitation signup request:", {
       hasToken: !!token,
       tokenLength: token?.length || 0,
-      hasEmail: !!email,
-      emailValue: email || "undefined",
+      email,
       hasPassword: !!password,
       passwordLength: password?.length || 0,
-      receivedFields: Object.keys(body),
-    }
-
-    console.log("[v0] Complete invitation signup request:", validationDetails)
+    })
 
     if (!token || !email || !password) {
-      const missingFields = {
-        tokenMissing: !token,
-        emailMissing: !email,
-        passwordMissing: !password,
-      }
-      console.log("[v0] Missing required fields:", missingFields)
-
-      return NextResponse.json(
-        {
-          error: "Missing required fields",
-          validation: validationDetails,
-          missing: missingFields,
-        },
-        { status: 400 },
-      )
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
     if (password.length < 8) {
@@ -104,15 +70,6 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("[v0] Complete invitation signup error:", error)
-    console.error("[v0] Error type:", typeof error)
-    console.error("[v0] Error message:", error instanceof Error ? error.message : String(error))
-
-    return NextResponse.json(
-      {
-        error: "Internal server error",
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 },
-    )
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
