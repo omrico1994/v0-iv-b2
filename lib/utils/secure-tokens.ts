@@ -46,6 +46,7 @@ export function validateInvitationToken(token: string, email: string): TokenVali
   try {
     const parts = token.split(".")
     if (parts.length !== 3) {
+      console.log("[v0] Invalid token format - expected 3 parts, got:", parts.length)
       return { isValid: false, isExpired: false }
     }
 
@@ -60,11 +61,13 @@ export function validateInvitationToken(token: string, email: string): TokenVali
     const expectedSignature = createHmac("sha256", secret).update(payloadString).digest("hex")
 
     if (signature !== expectedSignature) {
+      console.log("[v0] Token signature validation failed")
       return { isValid: false, isExpired: false }
     }
 
     // Check email match
     if (payload.email !== email) {
+      console.log("[v0] Token email mismatch")
       return { isValid: false, isExpired: false }
     }
 
@@ -72,12 +75,14 @@ export function validateInvitationToken(token: string, email: string): TokenVali
     const now = Date.now()
     const isExpired = now > payload.exp
 
+    console.log("[v0] Cryptographic token validation successful")
     return {
       isValid: true,
       isExpired,
       payload,
     }
   } catch (error) {
+    console.error("[v0] Token validation error:", error)
     return { isValid: false, isExpired: false }
   }
 }
