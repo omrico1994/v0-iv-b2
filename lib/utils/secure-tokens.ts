@@ -56,12 +56,14 @@ export function validateInvitationToken(token: string, email: string): TokenVali
     const payloadString = Buffer.from(payloadPart, "base64").toString("utf-8")
     const payload = JSON.parse(payloadString)
 
-    // Verify signature
     const secret = process.env.INVITATION_TOKEN_SECRET || process.env.SUPABASE_JWT_SECRET || "fallback-secret"
-    const expectedSignature = createHmac("sha256", secret).update(payloadString).digest("hex")
+    const signatureInput = `${randomPart}.${payloadPart}`
+    const expectedSignature = createHmac("sha256", secret).update(signatureInput).digest("hex")
 
     if (signature !== expectedSignature) {
       console.log("[v0] Token signature validation failed")
+      console.log("[v0] Expected:", expectedSignature)
+      console.log("[v0] Received:", signature)
       return { isValid: false, isExpired: false }
     }
 
