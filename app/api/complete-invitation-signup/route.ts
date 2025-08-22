@@ -3,59 +3,24 @@ import { UserService } from "@/lib/services/user-service"
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("[v0] API endpoint called - parsing request body...")
-
-    const rawBody = await request.text()
-    console.log("[v0] Raw request body as text:", rawBody.substring(0, 200) + "...")
-
-    // Parse the JSON from the raw text
-    const body = JSON.parse(rawBody)
-    console.log("[v0] Raw request body parsed successfully")
-
+    const body = await request.json()
     const { token, email, password } = body
 
-    return NextResponse.json({
-      debug: "API received data successfully",
-      receivedFields: {
-        token: token ? `${token.substring(0, 20)}...` : token,
-        email: email,
-        password: password ? `[${password.length} chars]` : password,
-        tokenTruthy: !!token,
-        emailTruthy: !!email,
-        passwordTruthy: !!password,
-        tokenType: typeof token,
-        emailType: typeof email,
-        passwordType: typeof password,
-      },
-      rawBodyPreview: rawBody.substring(0, 200),
-    })
-
-    // Field extraction results
-    console.log("[v0] Field extraction results:", {
-      tokenExists: "token" in body,
-      emailExists: "email" in body,
-      passwordExists: "password" in body,
-      tokenValue: token ? `${token.substring(0, 20)}...` : `"${token}"`,
-      emailValue: `"${email}"`,
-      passwordValue: password ? `[${password.length} chars]` : `"${password}"`,
-      tokenTruthy: !!token,
-      emailTruthy: !!email,
-      passwordTruthy: !!password,
+    console.log("[v0] Complete invitation signup request:", {
+      hasToken: !!token,
+      email,
+      hasPassword: !!password,
+      passwordLength: password?.length,
     })
 
     if (!token || !email || !password) {
-      console.log("[v0] Missing required fields - detailed check:", {
+      console.log("[v0] Missing required fields:", {
         tokenMissing: !token,
         emailMissing: !email,
         passwordMissing: !password,
-        tokenValue: token,
-        emailValue: email,
-        passwordValue: password ? "[REDACTED]" : null,
       })
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
-
-    console.log("[v0] Complete invitation signup request:", { token: !!token, email, hasPassword: !!password })
 
     if (password.length < 8) {
       return NextResponse.json({ error: "Password must be at least 8 characters long" }, { status: 400 })
