@@ -303,11 +303,20 @@ export function AccountSetupForm() {
           }
 
           console.log("[v0] Request data structure:", {
-            token: !!requestData.token,
-            email: !!requestData.email,
-            password: !!requestData.password,
+            tokenLength: requestData.token?.length,
+            emailValue: requestData.email,
             passwordLength: requestData.password?.length,
+            hasAllFields: !!(requestData.token && requestData.email && requestData.password),
           })
+
+          console.log(
+            "[v0] Final request body validation:",
+            JSON.stringify({
+              token: requestData.token ? `${requestData.token.substring(0, 20)}...` : "MISSING",
+              email: requestData.email || "MISSING",
+              password: requestData.password ? `[${requestData.password.length} chars]` : "MISSING",
+            }),
+          )
 
           console.log("[v0] Making API call to /api/complete-invitation-signup")
 
