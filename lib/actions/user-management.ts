@@ -4,6 +4,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server"
 import { getCurrentUser } from "@/lib/auth/get-user"
 import { revalidatePath } from "next/cache"
 import { sendInvitationEmail, sendPasswordResetEmail } from "@/lib/email/resend-service"
+import { generateInvitationToken } from "@/lib/utils/secure-tokens"
 
 export interface CreateUserData {
   email: string
@@ -374,8 +375,8 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
     }
     console.log("[v0] User role assigned")
 
-    // Generate invitation token
-    const invitationToken = `${authUser.user.id}_${Date.now()}`
+    const secureTokenData = generateInvitationToken(userData.email, 24)
+    const invitationToken = secureTokenData.token
 
     const { error: invitationError } = await supabase.from("user_invitations").insert({
       email: userData.email,
@@ -383,6 +384,7 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
       invited_by: currentUser.id,
       retailer_id: retailerId || null,
       invitation_token: invitationToken,
+      expires_at: secureTokenData.expiresAt.toISOString(),
       status: "pending",
       resent_count: 0,
       email_provider: "resend",

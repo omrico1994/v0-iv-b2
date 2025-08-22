@@ -1,12 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
-
-const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-})
+import { UserService } from "@/lib/services/user-service"
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,137 +12,50 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
-    console.log("[v0] Validating invitation token...")
+    const userService = new UserService()
 
-    const { data: invitation, error: invitationError } = await supabaseAdmin
-      .from("user_invitations")
-      .select("*, user_profiles(user_id, role)")
-      .eq("invitation_token", token)
-      .eq("email", email)
-      .in("status", ["pending", "sent"])
-      .single()
+    console.log("[v0] Validating invitation...")
+    const validation = await userService.validateInvitation(token, email)
 
-    console.log("[v0] Invitation query result:", { invitation, invitationError })
-
-    if (invitationError || !invitation) {
-      console.log("[v0] Invalid invitation:", invitationError)
-      return NextResponse.json({ error: "Invalid or expired invitation" }, { status: 400 })
+    if (!validation.valid) {
+      console.log("[v0] Invitation validation failed:", validation.error)
+      return NextResponse.json({ error: validation.error }, { status: 400 })
     }
 
-    // Check if invitation is expired (24 hours)
-    const invitationDate = new Date(invitation.created_at)
-    const now = new Date()
-    const hoursDiff = (now.getTime() - invitationDate.getTime()) / (1000 * 60 * 60)
+    const invitation = validation.invitation!
 
-    console.log("[v0] Invitation age check:", { invitationDate, now, hoursDiff })
+    console.log("[v0] Creating/updating user...")
+    const result = await userService.createOrUpdateUser({
+      email: email,
+      firstName: invitation.first_name || email.split("@")[0],
+      lastName: invitation.last_name || "",
+      phone: invitation.phone,
+      role: invitation.role === "location" ? "location_user" : invitation.role,
+      retailerId: invitation.retailer_id,
+      password: password,
+      invitationToken: token,
+    })
 
-    if (hoursDiff > 24) {
-      console.log("[v0] Invitation expired")
-      return NextResponse.json({ error: "Invitation has expired" }, { status: 400 })
+    if (!result.success) {
+      console.log("[v0] User creation/update failed:", result.error)
+      return NextResponse.json({ error: result.error }, { status: 400 })
     }
 
-    console.log("[v0] Creating user with admin API...")
+    console.log("[v0] Completing invitation...")
+    const completion = await userService.completeInvitation(token)
 
-    const { data: existingUser } = await supabaseAdmin.auth.admin.getUserByEmail(email)
-
-    let authData
-    if (existingUser?.user) {
-      console.log("[v0] User already exists, updating password...")
-
-      // Update existing user's password
-      const { data: updateData, error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-        existingUser.user.id,
-        {
-          password: password,
-          email_confirm: true,
-          user_metadata: {
-            ...existingUser.user.user_metadata,
-            invitation_token: token,
-            role: invitation.role,
-          },
-        },
-      )
-
-      if (updateError) {
-        console.log("[v0] User update failed:", updateError)
-        return NextResponse.json({ error: updateError.message || "Failed to update user" }, { status: 400 })
-      }
-
-      authData = { user: updateData.user }
-      console.log("[v0] User password updated successfully")
-    } else {
-      console.log("[v0] Creating new user...")
-
-      const { data: createData, error: signUpError } = await supabaseAdmin.auth.admin.createUser({
-        email: email,
-        password: password,
-        email_confirm: true,
-        user_metadata: {
-          invitation_token: token,
-          role: invitation.role,
-        },
-      })
-
-      if (signUpError || !createData.user) {
-        console.log("[v0] User creation failed:", signUpError)
-        return NextResponse.json({ error: signUpError?.message || "Failed to create user" }, { status: 400 })
-      }
-
-      authData = createData
-      console.log("[v0] New user created successfully")
+    if (!completion.success) {
+      console.error("[v0] Invitation completion failed:", completion.error)
+      // Don't fail the entire operation for this
     }
 
-    console.log("[v0] Updating user profile...")
-
-    // Update user profile with admin privileges
-    const { error: profileError } = await supabaseAdmin
-      .from("user_profiles")
-      .update({
-        email_verified_at: new Date().toISOString(),
-        last_login_at: new Date().toISOString(),
-      })
-      .eq("user_id", authData.user.id)
-
-    if (profileError) {
-      console.error("[v0] Profile update error:", profileError)
-    }
-
-    console.log("[v0] Updating invitation status...")
-
-    // Update invitation status with admin privileges
-    const { error: invitationUpdateError } = await supabaseAdmin
-      .from("user_invitations")
-      .update({
-        status: "accepted",
-        accepted_at: new Date().toISOString(),
-      })
-      .eq("invitation_token", token)
-
-    if (invitationUpdateError) {
-      console.error("[v0] Invitation update error:", invitationUpdateError)
-    }
-
-    // Determine redirect URL based on role
-    let redirectUrl = "/dashboard"
-
-    if (invitation.role === "retailer") {
-      redirectUrl = "/dashboard/retailer"
-    } else if (invitation.role === "admin") {
-      redirectUrl = "/dashboard/admin"
-    } else if (invitation.role === "office") {
-      redirectUrl = "/dashboard/office"
-    }
-
-    console.log("[v0] Account setup completed successfully:", { redirectUrl, role: invitation.role })
+    console.log("[v0] Account setup completed successfully")
 
     return NextResponse.json({
       success: true,
-      redirectUrl,
+      redirectUrl: result.redirectUrl,
       message: "Account setup completed successfully",
-      user: {
-        email: authData.user.email,
-        id: authData.user.id,
-      },
+      user: result.user,
     })
   } catch (error) {
     console.error("[v0] Complete invitation signup error:", error)
