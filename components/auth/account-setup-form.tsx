@@ -288,20 +288,28 @@ export function AccountSetupForm() {
         if (isInvitationFlow && invitationToken && userEmail) {
           console.log("[v0] Processing invitation signup")
 
+          console.log("[v0] Password validation before API call:", {
+            passwordLength: password.length,
+            hasPassword: !!password,
+            passwordType: typeof password,
+            passwordFirstChar: password.charAt(0),
+            passwordLastChar: password.charAt(password.length - 1),
+          })
+
           const requestData = {
             token: invitationToken,
             email: userEmail,
             password: password,
           }
 
-          console.log("[v0] Making API call to /api/complete-invitation-signup with:", {
-            token: invitationToken,
-            email: userEmail,
-            passwordLength: password.length,
-            hasPassword: !!password,
-            passwordFirstChar: password.charAt(0),
-            passwordLastChar: password.charAt(password.length - 1),
+          console.log("[v0] Request data structure:", {
+            token: !!requestData.token,
+            email: !!requestData.email,
+            password: !!requestData.password,
+            passwordLength: requestData.password?.length,
           })
+
+          console.log("[v0] Making API call to /api/complete-invitation-signup")
 
           let response
           let result
