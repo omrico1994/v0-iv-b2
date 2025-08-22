@@ -3,7 +3,10 @@ import { UserService } from "@/lib/services/user-service"
 
 export async function POST(request: NextRequest) {
   try {
+    console.log("[v0] API endpoint called - parsing request body...")
     const body = await request.json()
+    console.log("[v0] Raw request body parsed successfully")
+
     const { token, email, password } = body
 
     console.log("[v0] Complete invitation signup request body:", {

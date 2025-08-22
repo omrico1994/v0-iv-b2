@@ -334,6 +334,7 @@ export function AccountSetupForm() {
 
             console.log("[v0] API response status:", response.status)
             console.log("[v0] API response ok:", response.ok)
+            console.log("[v0] API response headers:", Object.fromEntries(response.headers.entries()))
 
             result = await response.json()
             console.log("[v0] API response body:", result)
@@ -345,7 +346,15 @@ export function AccountSetupForm() {
 
           if (!response.ok) {
             console.log("[v0] Invitation signup error:", result.error)
-            handleError(result.error || "Failed to complete account setup", { type: "invitation" })
+            const errorDetails = `API Error (${response.status}): ${result.error || "Unknown error"}`
+            console.log("[v0] Full error details:", {
+              status: response.status,
+              statusText: response.statusText,
+              error: result.error,
+              details: result.details,
+              fullResponse: result,
+            })
+            handleError(`${errorDetails}${result.details ? ` - ${result.details}` : ""}`, { type: "invitation" })
             return
           }
 
