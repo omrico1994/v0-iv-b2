@@ -287,10 +287,20 @@ export function AccountSetupForm() {
 
         if (isInvitationFlow && invitationToken && userEmail) {
           console.log("[v0] Processing invitation signup")
+
+          const requestData = {
+            token: invitationToken,
+            email: userEmail,
+            password: password,
+          }
+
           console.log("[v0] Making API call to /api/complete-invitation-signup with:", {
             token: invitationToken,
             email: userEmail,
             passwordLength: password.length,
+            hasPassword: !!password,
+            passwordFirstChar: password.charAt(0),
+            passwordLastChar: password.charAt(password.length - 1),
           })
 
           let response
@@ -302,11 +312,7 @@ export function AccountSetupForm() {
               headers: {
                 "Content-Type": "application/json",
               },
-              body: JSON.stringify({
-                token: invitationToken,
-                email: userEmail,
-                password: password,
-              }),
+              body: JSON.stringify(requestData),
             })
 
             console.log("[v0] API response status:", response.status)
