@@ -375,7 +375,7 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
     }
     console.log("[v0] User role assigned")
 
-    const secureTokenData = generateInvitationToken(userData.email, 168) // 7 days instead of 24 hours
+    const secureTokenData = await generateInvitationToken(userData.email, 168) // 7 days instead of 24 hours
     const invitationToken = secureTokenData.token
 
     const { error: invitationError } = await supabase.from("user_invitations").insert({
@@ -614,19 +614,24 @@ export async function resendInvitation(userId: string) {
       return { error: "User has already completed account setup" }
     }
 
-    const { data: invitation, error: invitationError } = await supabase
-      .from("user_invitations")
-      .select("invitation_token, status")
-      .eq("email", user.user.email)
-      .in("status", ["pending", "sent"])
-      .single()
+    const secureTokenData = await generateInvitationToken(user.user.email, 168) // 7 days
+    const newInvitationToken = secureTokenData.token
 
-    if (invitationError || !invitation) {
-      console.log("[v0] No resendable invitation found:", invitationError)
-      return { error: "No pending invitation found for this user" }
+    const { error: updateTokenError } = await supabase
+      .from("user_invitations")
+      .update({
+        invitation_token: newInvitationToken,
+        expires_at: secureTokenData.expiresAt.toISOString(),
+        status: "pending",
+      })
+      .eq("email", user.user.email)
+
+    if (updateTokenError) {
+      console.log("[v0] Failed to update invitation token:", updateTokenError)
+      return { error: "Failed to update invitation token" }
     }
 
-    const resetUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/auth/setup-account?token=${invitation.invitation_token}&email=${encodeURIComponent(user.user.email)}&type=reset`
+    const resetUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/auth/setup-account?token=${newInvitationToken}&email=${encodeURIComponent(user.user.email)}&type=reset`
 
     console.log("[v0] Sending custom password reset email")
     const emailResult = await sendPasswordResetEmail({

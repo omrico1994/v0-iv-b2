@@ -11,7 +11,7 @@ export interface TokenValidation {
   payload?: any
 }
 
-export function generateInvitationToken(email: string, expirationHours = 24): SecureToken {
+export async function generateInvitationToken(email: string, expirationHours = 24): Promise<SecureToken> {
   const expiresAt = new Date(Date.now() + expirationHours * 60 * 60 * 1000)
 
   const payload = {
@@ -25,14 +25,14 @@ export function generateInvitationToken(email: string, expirationHours = 24): Se
     process.env.INVITATION_TOKEN_SECRET || process.env.SUPABASE_JWT_SECRET || "fallback-secret",
   )
 
-  const token = new SignJWT(payload)
+  const token = await new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(payload.exp)
     .sign(secret)
 
   return {
-    token: token.toString(),
+    token,
     expiresAt,
   }
 }
