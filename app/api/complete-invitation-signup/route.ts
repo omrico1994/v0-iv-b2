@@ -14,9 +14,8 @@ export async function POST(request: NextRequest) {
 
     const { token, email, password } = body
 
-    // TEMPORARY: Return what we received for debugging
     return NextResponse.json({
-      debug: "API received data",
+      debug: "API received data successfully",
       receivedFields: {
         token: token ? `${token.substring(0, 20)}...` : token,
         email: email,
@@ -31,23 +30,7 @@ export async function POST(request: NextRequest) {
       rawBodyPreview: rawBody.substring(0, 200),
     })
 
-    // TEMPORARY: Return what we received for debugging
-    // return NextResponse.json({
-    //   debug: "API received data",
-    //   receivedFields: {
-    //     token: token ? `${token.substring(0, 20)}...` : token,
-    //     email: email,
-    //     password: password ? `[${password.length} chars]` : password,
-    //     tokenTruthy: !!token,
-    //     emailTruthy: !!email,
-    //     passwordTruthy: !!password,
-    //     tokenType: typeof token,
-    //     emailType: typeof email,
-    //     passwordType: typeof password,
-    //   },
-    //   rawBodyPreview: rawBody.substring(0, 200),
-    // })
-
+    // Field extraction results
     console.log("[v0] Field extraction results:", {
       tokenExists: "token" in body,
       emailExists: "email" in body,
@@ -126,6 +109,12 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("[v0] Complete invitation signup error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "Internal server error",
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    )
   }
 }
