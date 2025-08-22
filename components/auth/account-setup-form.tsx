@@ -253,13 +253,31 @@ export function AccountSetupForm() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (password !== confirmPassword) {
-      handleError("Passwords do not match", { type: "validation" })
+    console.log("[v0] Form validation check:", {
+      passwordLength: password.length,
+      confirmPasswordLength: confirmPassword.length,
+      passwordsMatch: password === confirmPassword,
+      hasPassword: !!password,
+      hasConfirmPassword: !!confirmPassword,
+    })
+
+    if (!password || !confirmPassword) {
+      handleError("Please fill in both password fields", { type: "validation" })
       return
     }
 
     if (password.length < 8) {
       handleError("Password must be at least 8 characters long", { type: "validation" })
+      return
+    }
+
+    if (confirmPassword.length < 8) {
+      handleError("Confirm password must be at least 8 characters long", { type: "validation" })
+      return
+    }
+
+    if (password !== confirmPassword) {
+      handleError("Passwords do not match", { type: "validation" })
       return
     }
 
@@ -535,7 +553,13 @@ export function AccountSetupForm() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
+              noValidate
             />
+            {password && password.length < 8 && (
+              <p className="text-sm text-muted-foreground">
+                Password must be at least 8 characters ({password.length}/8)
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -548,7 +572,11 @@ export function AccountSetupForm() {
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
               minLength={8}
+              noValidate
             />
+            {confirmPassword && password !== confirmPassword && (
+              <p className="text-sm text-destructive">Passwords do not match</p>
+            )}
           </div>
 
           <Button type="submit" className="w-full" disabled={isPending || !password || !confirmPassword}>
