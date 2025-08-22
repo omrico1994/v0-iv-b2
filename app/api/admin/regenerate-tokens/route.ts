@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { generateNewInvitationToken } from "@/lib/utils/regenerate-tokens"
+import { createSecureInvitationToken } from "@/lib/utils/secure-tokens"
 
 export async function POST(request: NextRequest) {
   try {
@@ -39,17 +39,20 @@ export async function POST(request: NextRequest) {
     // Regenerate tokens for each invitation
     for (const invitation of invitations || []) {
       try {
-        const newToken = generateNewInvitationToken(
-          invitation.email,
-          invitation.invited_by,
-          invitation.expires_at ? new Date(invitation.expires_at) : undefined,
-        )
+        const expirationTime = invitation.expires_at
+          ? Math.floor(new Date(invitation.expires_at).getTime() / 1000)
+          : Math.floor((Date.now() + 7 * 24 * 60 * 60 * 1000) / 1000) // 7 days default
+
+        const newToken = await createSecureInvitationToken({
+          email: invitation.email,
+          invitedBy: invitation.invited_by || "",
+          exp: expirationTime,
+        })
 
         const { error: updateError } = await supabase
           .from("user_invitations")
           .update({
-            token: newToken,
-            updated_at: new Date().toISOString(),
+            invitation_token: newToken,
           })
           .eq("id", invitation.id)
 
@@ -65,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `Regenerated ${updatedCount} invitation tokens`,
+      message: `Regenerated ${updatedCount} invitation tokens with JWT format`,
       updatedCount,
     })
   } catch (error) {

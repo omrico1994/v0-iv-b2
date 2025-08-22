@@ -166,8 +166,7 @@ export class UserService {
     try {
       console.log("[v0] UserService: Validating invitation token")
 
-      // First validate the cryptographic token
-      const tokenValidation = validateInvitationToken(token, email)
+      const tokenValidation = await validateInvitationToken(token, email)
       if (!tokenValidation.isValid) {
         return { valid: false, error: "Invalid invitation token" }
       }
@@ -176,7 +175,6 @@ export class UserService {
         return { valid: false, error: "Invitation has expired" }
       }
 
-      // Then check database record
       const { data: invitation, error: invitationError } = await this.supabase
         .from("user_invitations")
         .select("*")
@@ -190,8 +188,10 @@ export class UserService {
         return { valid: false, error: "Invalid or expired invitation" }
       }
 
-      // Check database expiration if set
       if (invitation.expires_at && new Date(invitation.expires_at) < new Date()) {
+        // Update status to expired in database
+        await this.supabase.from("user_invitations").update({ status: "expired" }).eq("invitation_token", token)
+
         return { valid: false, error: "Invitation has expired" }
       }
 

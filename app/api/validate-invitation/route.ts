@@ -5,7 +5,7 @@ export async function POST(request: NextRequest) {
   try {
     const { token, email } = await request.json()
 
-    console.log("[v0] Validation request received:", { token, email })
+    console.log("[v0] Validation request received:", { token: !!token, email })
 
     if (!token || !email) {
       return NextResponse.json({ valid: false, error: "Token and email are required" }, { status: 400 })
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     const validation = await userService.validateInvitation(token, email)
 
     if (!validation.valid) {
-      const statusCode = validation.error?.includes("expired") ? 410 : 404
+      const statusCode = validation.error?.includes("expired") ? 410 : validation.error?.includes("Invalid") ? 404 : 400
       return NextResponse.json({ valid: false, error: validation.error }, { status: statusCode })
     }
 

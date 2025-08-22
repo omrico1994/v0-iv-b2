@@ -375,7 +375,7 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
     }
     console.log("[v0] User role assigned")
 
-    const secureTokenData = generateInvitationToken(userData.email, 24)
+    const secureTokenData = generateInvitationToken(userData.email, 168) // 7 days instead of 24 hours
     const invitationToken = secureTokenData.token
 
     const { error: invitationError } = await supabase.from("user_invitations").insert({

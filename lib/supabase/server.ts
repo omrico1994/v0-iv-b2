@@ -65,3 +65,5 @@ export const createServiceClient = () => {
     },
   })
 }
+
+export { createClient as createServerClient }

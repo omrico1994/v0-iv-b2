@@ -5,11 +5,15 @@ export async function POST(request: NextRequest) {
   try {
     const { token, email, password } = await request.json()
 
-    console.log("[v0] Complete invitation signup request:", { token, email, hasPassword: !!password })
+    console.log("[v0] Complete invitation signup request:", { token: !!token, email, hasPassword: !!password })
 
     if (!token || !email || !password) {
       console.log("[v0] Missing required fields")
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    }
+
+    if (password.length < 8) {
+      return NextResponse.json({ error: "Password must be at least 8 characters long" }, { status: 400 })
     }
 
     const userService = new UserService()
@@ -19,7 +23,8 @@ export async function POST(request: NextRequest) {
 
     if (!validation.valid) {
       console.log("[v0] Invitation validation failed:", validation.error)
-      return NextResponse.json({ error: validation.error }, { status: 400 })
+      const statusCode = validation.error?.includes("expired") ? 410 : 400
+      return NextResponse.json({ error: validation.error }, { status: statusCode })
     }
 
     const invitation = validation.invitation!
