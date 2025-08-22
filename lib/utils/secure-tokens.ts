@@ -119,8 +119,14 @@ export function createSecureInvitationToken(payload: { email: string; invitedBy:
   // Generate 32 bytes of random data for the token
   const randomPart = randomBytes(16).toString("hex")
 
-  // Create the payload string
-  const payloadString = JSON.stringify(payload)
+  const expInMilliseconds = payload.exp < 10000000000 ? payload.exp * 1000 : payload.exp
+
+  // Create the payload string with corrected expiration
+  const correctedPayload = {
+    ...payload,
+    exp: expInMilliseconds,
+  }
+  const payloadString = JSON.stringify(correctedPayload)
   const encodedPayload = Buffer.from(payloadString).toString("base64")
 
   // Sign the token with HMAC to prevent tampering
