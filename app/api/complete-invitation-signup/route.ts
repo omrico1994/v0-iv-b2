@@ -6,20 +6,34 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { token, email, password } = body
 
-    console.log("[v0] Complete invitation signup request:", {
+    const validationDetails = {
       hasToken: !!token,
-      email,
+      tokenLength: token?.length || 0,
+      hasEmail: !!email,
+      emailValue: email || "undefined",
       hasPassword: !!password,
-      passwordLength: password?.length,
-    })
+      passwordLength: password?.length || 0,
+      receivedFields: Object.keys(body),
+    }
+
+    console.log("[v0] Complete invitation signup request:", validationDetails)
 
     if (!token || !email || !password) {
-      console.log("[v0] Missing required fields:", {
+      const missingFields = {
         tokenMissing: !token,
         emailMissing: !email,
         passwordMissing: !password,
-      })
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+      }
+      console.log("[v0] Missing required fields:", missingFields)
+
+      return NextResponse.json(
+        {
+          error: "Missing required fields",
+          validation: validationDetails,
+          missing: missingFields,
+        },
+        { status: 400 },
+      )
     }
 
     if (password.length < 8) {
