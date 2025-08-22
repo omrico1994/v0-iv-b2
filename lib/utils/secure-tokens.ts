@@ -91,3 +91,20 @@ export function validateInvitationToken(token: string, email: string): TokenVali
 export function generateSecureToken(): string {
   return randomBytes(32).toString("hex")
 }
+
+export function createSecureInvitationToken(payload: { email: string; invitedBy: string; exp: number }): string {
+  // Generate 32 bytes of random data for the token
+  const randomPart = randomBytes(16).toString("hex")
+
+  // Create the payload string
+  const payloadString = JSON.stringify(payload)
+  const encodedPayload = Buffer.from(payloadString).toString("base64")
+
+  // Sign the token with HMAC to prevent tampering
+  const secret = process.env.INVITATION_TOKEN_SECRET || process.env.SUPABASE_JWT_SECRET || "fallback-secret"
+  const signatureInput = `${randomPart}.${encodedPayload}`
+  const signature = createHmac("sha256", secret).update(signatureInput).digest("hex")
+
+  // Combine into final token format: randomPart.encodedPayload.signature
+  return `${randomPart}.${encodedPayload}.${signature}`
+}
