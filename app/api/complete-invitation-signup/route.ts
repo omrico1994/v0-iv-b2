@@ -3,14 +3,35 @@ import { UserService } from "@/lib/services/user-service"
 
 export async function POST(request: NextRequest) {
   try {
-    const { token, email, password } = await request.json()
+    const body = await request.json()
+    const { token, email, password } = body
 
-    console.log("[v0] Complete invitation signup request:", { token: !!token, email, hasPassword: !!password })
+    console.log("[v0] Complete invitation signup request body:", {
+      fullBody: body,
+      token: token ? `${token.substring(0, 20)}...` : null,
+      email,
+      password: password ? `[${password.length} chars]` : null,
+      hasToken: !!token,
+      hasEmail: !!email,
+      hasPassword: !!password,
+      tokenType: typeof token,
+      emailType: typeof email,
+      passwordType: typeof password,
+    })
 
     if (!token || !email || !password) {
-      console.log("[v0] Missing required fields")
+      console.log("[v0] Missing required fields - detailed check:", {
+        tokenMissing: !token,
+        emailMissing: !email,
+        passwordMissing: !password,
+        tokenValue: token,
+        emailValue: email,
+        passwordValue: password ? "[REDACTED]" : null,
+      })
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
+
+    console.log("[v0] Complete invitation signup request:", { token: !!token, email, hasPassword: !!password })
 
     if (password.length < 8) {
       return NextResponse.json({ error: "Password must be at least 8 characters long" }, { status: 400 })
