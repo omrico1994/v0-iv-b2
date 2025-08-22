@@ -9,13 +9,34 @@ export async function POST(request: NextRequest) {
     console.log("[v0] Complete invitation signup request:", {
       hasToken: !!token,
       tokenLength: token?.length || 0,
+      tokenType: typeof token,
       email,
+      emailType: typeof email,
       hasPassword: !!password,
       passwordLength: password?.length || 0,
+      passwordType: typeof password,
+      rawBody: JSON.stringify(body).substring(0, 200) + "...",
     })
 
-    if (!token || !email || !password) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    const missingFields = []
+    if (!token) missingFields.push("token")
+    if (!email) missingFields.push("email")
+    if (!password) missingFields.push("password")
+
+    if (missingFields.length > 0) {
+      console.log("[v0] Missing fields detected:", missingFields)
+      return NextResponse.json(
+        {
+          error: "Missing required fields",
+          missing: missingFields,
+          received: {
+            token: token ? `${token.substring(0, 20)}...` : token,
+            email: email,
+            password: password ? `[${password.length} chars]` : password,
+          },
+        },
+        { status: 400 },
+      )
     }
 
     if (password.length < 8) {
