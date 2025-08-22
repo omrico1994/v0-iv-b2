@@ -4,22 +4,26 @@ import { UserService } from "@/lib/services/user-service"
 export async function POST(request: NextRequest) {
   try {
     console.log("[v0] API endpoint called - parsing request body...")
-    const body = await request.json()
+
+    const rawBody = await request.text()
+    console.log("[v0] Raw request body as text:", rawBody.substring(0, 200) + "...")
+
+    // Parse the JSON from the raw text
+    const body = JSON.parse(rawBody)
     console.log("[v0] Raw request body parsed successfully")
 
     const { token, email, password } = body
 
-    console.log("[v0] Complete invitation signup request body:", {
-      fullBody: body,
-      token: token ? `${token.substring(0, 20)}...` : null,
-      email,
-      password: password ? `[${password.length} chars]` : null,
-      hasToken: !!token,
-      hasEmail: !!email,
-      hasPassword: !!password,
-      tokenType: typeof token,
-      emailType: typeof email,
-      passwordType: typeof password,
+    console.log("[v0] Field extraction results:", {
+      tokenExists: "token" in body,
+      emailExists: "email" in body,
+      passwordExists: "password" in body,
+      tokenValue: token ? `${token.substring(0, 20)}...` : `"${token}"`,
+      emailValue: `"${email}"`,
+      passwordValue: password ? `[${password.length} chars]` : `"${password}"`,
+      tokenTruthy: !!token,
+      emailTruthy: !!email,
+      passwordTruthy: !!password,
     })
 
     if (!token || !email || !password) {
