@@ -358,25 +358,10 @@ export function AccountSetupForm() {
             return
           }
 
-          console.log("[v0] Invitation signup successful, signing in user...")
-
-          await new Promise((resolve) => setTimeout(resolve, 2000))
-
-          const { error: signInError } = await supabase.auth.signInWithPassword({
-            email: userEmail,
-            password: password,
-          })
-
-          if (signInError) {
-            console.log("[v0] Auto sign-in error:", signInError)
-            setError(null)
-            setRecoveryActions([])
-            router.push("/auth/login?message=Account created successfully! Please sign in with your new password.")
-            return
-          }
-
-          console.log("[v0] User signed in successfully, redirecting to:", result.redirectUrl)
-          router.push(result.redirectUrl || "/dashboard")
+          console.log("[v0] Invitation signup successful, redirecting to login")
+          router.push(
+            "/auth/login?message=Account setup completed successfully! Please sign in with your new password.",
+          )
           return
         }
 
