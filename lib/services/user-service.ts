@@ -189,6 +189,7 @@ export class UserService {
             email_verified_at: data.password ? new Date().toISOString() : null,
             last_login_at: data.password ? new Date().toISOString() : null,
             business_setup_completed: data.role === "admin" || data.role === "office",
+            is_active: data.isInvitationAcceptance ? true : undefined,
           }),
           this.supabase.from("user_roles").upsert({
             user_id: authUser.id,

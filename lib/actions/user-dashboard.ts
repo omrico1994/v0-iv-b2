@@ -295,41 +295,80 @@ export async function updateUserProfile(
 
 export async function toggleUserStatus(userId: string) {
   try {
+    console.log("[v0] Starting toggleUserStatus for userId:", userId)
+
     const supabase = createServiceClient()
     if (!supabase) {
+      console.log("[v0] Service client not configured")
       return { error: "Service client not configured" }
     }
 
     const currentUser = await getCurrentUser()
+    console.log("[v0] Current user:", currentUser?.email, currentUser?.role)
 
     if (!currentUser || !["admin", "office"].includes(currentUser.role)) {
+      console.log("[v0] Unauthorized user role:", currentUser?.role)
       return { error: "Unauthorized to modify user status" }
     }
 
     // Get current status
-    const { data: currentProfile } = await supabase.from("user_profiles").select("is_active").eq("id", userId).single()
+    console.log("[v0] Getting current profile for userId:", userId)
+    const { data: currentProfile, error: profileError } = await supabase
+      .from("user_profiles")
+      .select("is_active")
+      .eq("id", userId)
+      .single()
+
+    if (profileError) {
+      console.log("[v0] Profile lookup error:", {
+        message: profileError.message,
+        details: profileError.details,
+        hint: profileError.hint,
+        code: profileError.code,
+      })
+      return { error: `Failed to find user profile: ${profileError.message}` }
+    }
 
     if (!currentProfile) {
+      console.log("[v0] No profile found for userId:", userId)
       return { error: "User not found" }
     }
 
+    console.log("[v0] Current profile status:", currentProfile.is_active)
+
     // Toggle status
     const newStatus = !currentProfile.is_active
-    const { error: updateError } = await supabase
-      .from("user_profiles")
-      .update({
-        is_active: newStatus,
-        deactivated_at: newStatus ? null : new Date().toISOString(),
-        deactivated_by: newStatus ? null : currentUser.id,
-      })
-      .eq("id", userId)
+    console.log("[v0] Updating status to:", newStatus)
 
-    if (updateError) {
-      return { error: "Failed to update user status" }
+    const updateData = {
+      is_active: newStatus,
+      deactivated_at: newStatus ? null : new Date().toISOString(),
+      deactivated_by: newStatus ? null : currentUser.id,
     }
 
+    console.log("[v0] Update data:", updateData)
+
+    const { error: updateError, data: updateResult } = await supabase
+      .from("user_profiles")
+      .update(updateData)
+      .eq("id", userId)
+      .select()
+
+    if (updateError) {
+      console.log("[v0] Update error details:", {
+        message: updateError.message,
+        details: updateError.details,
+        hint: updateError.hint,
+        code: updateError.code,
+      })
+      return { error: `Failed to update user status: ${updateError.message} (Code: ${updateError.code})` }
+    }
+
+    console.log("[v0] Update successful, result:", updateResult)
+
     // Log audit trail
-    await supabase.from("audit_logs").insert({
+    console.log("[v0] Creating audit log entry")
+    const { error: auditError } = await supabase.from("audit_logs").insert({
       user_id: currentUser.id,
       action: "UPDATE",
       table_name: "user_profiles",
@@ -338,10 +377,19 @@ export async function toggleUserStatus(userId: string) {
       new_data: { is_active: newStatus },
     })
 
+    if (auditError) {
+      console.log("[v0] Audit log error:", auditError)
+      // Don't fail the operation for audit log issues
+    }
+
+    console.log("[v0] Revalidating path and returning success")
     revalidatePath("/dashboard/admin/users")
     return { success: `User ${newStatus ? "activated" : "deactivated"} successfully` }
   } catch (error) {
-    console.error("Error toggling user status:", error)
+    console.error("[v0] Unexpected error in toggleUserStatus:", error)
+    if (error instanceof Error) {
+      return { error: `Unexpected error: ${error.message}` }
+    }
     return { error: "An unexpected error occurred" }
   }
 }
