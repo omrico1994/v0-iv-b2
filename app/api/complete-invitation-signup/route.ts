@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { token, email, password } = body
 
-    console.log("[v0] Complete invitation signup request:", {
+    console.log("[v0] Complete invitation signup request v2.0:", {
       hasToken: !!token,
       tokenLength: token?.length || 0,
       tokenType: typeof token,
@@ -28,6 +28,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: "Missing required fields",
+          version: "v2.0",
           missing: missingFields,
           received: {
             token: token ? `${token.substring(0, 20)}...` : token,
@@ -91,6 +92,12 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("[v0] Complete invitation signup error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "Internal server error",
+        version: "v2.0",
+      },
+      { status: 500 },
+    )
   }
 }
