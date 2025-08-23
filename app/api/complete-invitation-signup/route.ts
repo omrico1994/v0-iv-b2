@@ -2,6 +2,12 @@ import { type NextRequest, NextResponse } from "next/server"
 import { UserService } from "@/lib/services/user-service"
 
 export async function POST(request: NextRequest) {
+  return NextResponse.json({
+    version: "v3.0-DEPLOYED",
+    timestamp: new Date().toISOString(),
+    message: "API endpoint is working - deployment confirmed",
+  })
+
   try {
     const body = await request.json()
     const { token, email, password } = body
