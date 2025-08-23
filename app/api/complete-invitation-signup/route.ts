@@ -77,6 +77,7 @@ export async function POST(request: NextRequest) {
       retailerId: invitation.retailer_id,
       password: password,
       invitationToken: token,
+      isInvitationAcceptance: true,
     })
 
     if (!result.success) {

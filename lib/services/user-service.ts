@@ -10,6 +10,7 @@ export interface UserCreationData {
   retailerId?: string
   password?: string
   invitationToken?: string
+  isInvitationAcceptance?: boolean
 }
 
 export interface UserCreationResult {
@@ -34,16 +35,28 @@ export class UserService {
 
   async createOrUpdateUser(data: UserCreationData): Promise<UserCreationResult> {
     try {
-      console.log("[v0] UserService: Starting user creation/update:", { email: data.email, role: data.role })
+      console.log("[v0] UserService: Starting user creation/update:", {
+        email: data.email,
+        role: data.role,
+        isInvitationAcceptance: data.isInvitationAcceptance,
+      })
 
       const missingFields = []
       if (!data.email?.trim()) missingFields.push("email")
-      if (!data.firstName?.trim()) missingFields.push("firstName")
+
+      if (!data.isInvitationAcceptance && !data.firstName?.trim()) {
+        missingFields.push("firstName")
+      }
+
       if (!data.role?.trim()) missingFields.push("role")
 
       // lastName can be empty string, so only check if it's null/undefined
       if (data.lastName === null || data.lastName === undefined) {
         missingFields.push("lastName")
+      }
+
+      if (data.isInvitationAcceptance && !data.firstName?.trim()) {
+        data.firstName = data.email.split("@")[0] || "User"
       }
 
       console.log("[v0] UserService: Field validation:", {
@@ -98,9 +111,14 @@ export class UserService {
 
         authUser = updateResult.user
       } else {
+        if (data.isInvitationAcceptance) {
+          console.log("[v0] UserService: User not found for invitation acceptance")
+          return { success: false, error: "User account not found. Please contact administrator." }
+        }
+
         console.log("[v0] UserService: Creating new user")
 
-        // Create new user
+        // Create new user (only for admin-initiated creation, not invitation acceptance)
         const createData: any = {
           email: data.email,
           email_confirm: data.password ? true : false,
@@ -157,13 +175,15 @@ export class UserService {
           throw new Error(`Role assignment failed: ${roleResult.error.message}`)
         }
       } catch (dbError) {
-        // If database operations fail, we should clean up the auth user
-        console.error("[v0] Database operations failed, cleaning up auth user:", dbError)
+        // If database operations fail, we should clean up the auth user (only for new user creation)
+        if (!existingUser?.user) {
+          console.error("[v0] Database operations failed, cleaning up auth user:", dbError)
 
-        try {
-          await this.supabase.auth.admin.deleteUser(authUser.id)
-        } catch (cleanupError) {
-          console.error("[v0] Failed to cleanup auth user:", cleanupError)
+          try {
+            await this.supabase.auth.admin.deleteUser(authUser.id)
+          } catch (cleanupError) {
+            console.error("[v0] Failed to cleanup auth user:", cleanupError)
+          }
         }
 
         return { success: false, error: dbError instanceof Error ? dbError.message : "Database operation failed" }
