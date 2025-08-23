@@ -3,6 +3,12 @@ import { UserService } from "@/lib/services/user-service"
 
 export async function POST(request: NextRequest) {
   try {
+    return NextResponse.json({
+      version: "v2.1-FORCE-CHECK",
+      timestamp: new Date().toISOString(),
+      message: "API endpoint reached - checking deployment status",
+    })
+
     const body = await request.json()
     const { token, email, password } = body
 
