@@ -4,8 +4,6 @@ import { GeistSans } from "geist/font/sans"
 import { GeistMono } from "geist/font/mono"
 import { Manrope } from "next/font/google"
 import { ThemeProvider } from "next-themes"
-import { ErrorBoundary } from "@/components/error-boundary"
-import { ErrorProvider } from "@/components/providers/error-provider"
 import "./globals.css"
 
 const geist = GeistSans({ subsets: ["latin"] })
@@ -34,13 +32,9 @@ html {
         `}</style>
       </head>
       <body>
-        <ErrorProvider>
-          <ErrorBoundary component="RootLayout" showDetails={true}>
-            <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-              {children}
-            </ThemeProvider>
-          </ErrorBoundary>
-        </ErrorProvider>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   )
