@@ -77,8 +77,11 @@ export class UserService {
       let existingUser
       try {
         console.log("[v0] UserService: Looking up existing user...")
-        const result = await this.supabase.auth.admin.getUserByEmail(data.email)
-        existingUser = result.data
+        const result = await this.supabase.auth.admin.listUsers({
+          filter: `email.eq.${data.email}`,
+        })
+
+        existingUser = result.data?.users?.[0] ? { user: result.data.users[0] } : null
         console.log("[v0] UserService: User lookup result:", { found: !!existingUser?.user })
       } catch (lookupError) {
         console.error("[v0] UserService: User lookup failed:", lookupError)
