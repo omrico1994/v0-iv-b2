@@ -1,5 +1,3 @@
-"use server"
-
 export enum ServerLogLevel {
   DEBUG = 0,
   INFO = 1,
