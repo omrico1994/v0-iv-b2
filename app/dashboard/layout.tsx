@@ -7,10 +7,11 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   return (
-    <ErrorBoundary>
+    <ErrorBoundary component="DashboardLayout" showDetails={true}>
       <div className="min-h-screen bg-gray-50">
         <div className="p-4">
           <ErrorBoundary
+            component="DashboardContent"
             fallback={
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
                 <h2 className="text-lg font-semibold text-red-800">Layout Error</h2>

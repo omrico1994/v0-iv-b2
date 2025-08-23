@@ -5,6 +5,16 @@ import { getCurrentUser } from "@/lib/auth/get-user"
 import { revalidatePath } from "next/cache"
 import { sendInvitationEmail, sendPasswordResetEmail } from "@/lib/email/resend-service"
 import { generateInvitationToken } from "@/lib/utils/secure-tokens"
+import {
+  logServerAction,
+  logServerActionError,
+  logDatabaseOperation,
+  logDatabaseError,
+  logAuthOperation,
+  logAuthError,
+  logBusinessLogic,
+  logBusinessError,
+} from "@/lib/utils/server-logger"
 
 export interface CreateUserData {
   email: string
@@ -198,31 +208,42 @@ export async function createUser(prevState: any, formData: FormData) {
 }
 
 export async function createUserFromAdmin(userData: AdminCreateUserData) {
+  const actionName = "createUserFromAdmin"
+  let currentUserId: string | undefined
+
   try {
-    console.log("[v0] Starting user creation with data:", userData)
+    logServerAction(actionName, undefined, { email: userData.email, role: userData.role })
 
     const supabase = createServiceClient()
     if (!supabase) {
-      console.log("[v0] Service client not configured")
+      logServerActionError(actionName, new Error("Service client not configured"))
       return { error: "Service client not configured" }
     }
 
     const currentUser = await getCurrentUser()
-    console.log("[v0] Current user:", currentUser?.email, currentUser?.role)
+    currentUserId = currentUser?.id
+    logAuthOperation("getCurrentUser", currentUserId, { action: actionName })
 
     // Check permissions
     if (!currentUser || !["admin", "office"].includes(currentUser.role)) {
-      console.log("[v0] Unauthorized user")
+      logAuthError("unauthorized_access", new Error("Unauthorized user"), currentUserId, {
+        userRole: currentUser?.role,
+        requiredRoles: ["admin", "office"],
+      })
       return { error: "Unauthorized to create users" }
     }
 
     // Validate required fields
     if (!userData.email || !userData.firstName || !userData.lastName || !userData.role) {
-      console.log("[v0] Missing required fields:", {
+      const missingFields = {
         email: !!userData.email,
         firstName: !!userData.firstName,
         lastName: !!userData.lastName,
         role: !!userData.role,
+      }
+      logBusinessError("validation_failed", new Error("Missing required fields"), currentUserId, {
+        missingFields,
+        action: actionName,
       })
       return { error: "Missing required fields" }
     }
@@ -233,7 +254,10 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
       userData.businessType === "new" &&
       !userData.businessName
     ) {
-      console.log("[v0] Missing business name for new retailer")
+      logBusinessError("validation_failed", new Error("Missing business name"), currentUserId, {
+        role: userData.role,
+        businessType: userData.businessType,
+      })
       return { error: "Business name is required for new retailer" }
     }
 
@@ -242,26 +266,31 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
       userData.businessType === "existing" &&
       !userData.existingRetailerId
     ) {
-      console.log("[v0] Missing existing retailer ID")
+      logBusinessError("validation_failed", new Error("Missing retailer ID"), currentUserId, {
+        role: userData.role,
+        businessType: userData.businessType,
+      })
       return { error: "Must select an existing retailer" }
     }
 
     // Check if user already exists
-    console.log("[v0] Checking if user exists:", userData.email)
+    logDatabaseOperation("listUsers", "auth.users", { email: userData.email })
     const { data: usersList, error: listError } = await supabase.auth.admin.listUsers()
     if (listError) {
-      console.log("[v0] Error checking existing users:", listError)
+      logDatabaseError("listUsers", "auth.users", listError, { email: userData.email })
       return { error: "Failed to check existing users" }
     }
 
     const existingUser = usersList.users.find((user) => user.email === userData.email)
     if (existingUser) {
-      console.log("[v0] User already exists")
+      logBusinessError("user_already_exists", new Error("User already exists"), currentUserId, {
+        email: userData.email,
+      })
       return { error: "User with this email already exists" }
     }
 
     // Create user in Supabase Auth
-    console.log("[v0] Creating auth user")
+    logAuthOperation("createUser", currentUserId, { email: userData.email, role: userData.role })
     const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
       email: userData.email,
       email_confirm: false, // They'll confirm via invitation
@@ -275,13 +304,18 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
     })
 
     if (authError || !authUser.user) {
-      console.log("[v0] Auth user creation failed:", authError)
+      logAuthError("createUser", authError || new Error("No user returned"), currentUserId, {
+        email: userData.email,
+      })
       return { error: authError?.message || "Failed to create user account" }
     }
-    console.log("[v0] Auth user created:", authUser.user.id)
+    logAuthOperation("createUser_success", currentUserId, {
+      newUserId: authUser.user.id,
+      email: userData.email,
+    })
 
     // Create user profile
-    console.log("[v0] Creating user profile")
+    logDatabaseOperation("insert", "user_profiles", { userId: authUser.user.id })
     const { error: profileError } = await supabase.from("user_profiles").insert({
       id: authUser.user.id,
       first_name: userData.firstName,
@@ -292,18 +326,18 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
     })
 
     if (profileError) {
-      console.log("[v0] Profile creation failed:", profileError)
+      logDatabaseError("insert", "user_profiles", profileError, { userId: authUser.user.id })
       // Cleanup auth user if profile creation fails
       await supabase.auth.admin.deleteUser(authUser.user.id)
       return { error: `Failed to create user profile: ${profileError.message}` }
     }
-    console.log("[v0] User profile created")
+    logDatabaseOperation("insert_success", "user_profiles", { userId: authUser.user.id })
 
     // Handle retailer creation or assignment
     let retailerId = userData.existingRetailerId
     let businessName = userData.businessName
     if ((userData.role === "retailer" || userData.role === "location_user") && userData.businessType === "new") {
-      console.log("[v0] Creating new retailer:", userData.businessName)
+      logBusinessLogic("create_new_retailer", currentUserId, { businessName: userData.businessName })
 
       const uniqueName = `${userData.businessName!.toLowerCase().replace(/\s+/g, "")}_${Date.now()}`
 
@@ -321,7 +355,7 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
         created_by: currentUser.id,
       }
 
-      console.log("[v0] Retailer data to insert:", retailerData)
+      logDatabaseOperation("insert", "retailers", { businessName: userData.businessName })
 
       const { data: retailer, error: retailerError } = await supabase
         .from("retailers")
@@ -330,25 +364,31 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
         .single()
 
       if (retailerError) {
-        console.log("[v0] Retailer creation failed with detailed error:", {
-          message: retailerError.message,
-          details: retailerError.details,
-          hint: retailerError.hint,
-          code: retailerError.code,
+        logDatabaseError("insert", "retailers", retailerError, {
+          businessName: userData.businessName,
+          errorDetails: {
+            message: retailerError.message,
+            details: retailerError.details,
+            hint: retailerError.hint,
+            code: retailerError.code,
+          },
         })
         await supabase.auth.admin.deleteUser(authUser.user.id)
         return { error: `Failed to create retailer: ${retailerError.message} (Code: ${retailerError.code})` }
       }
 
       if (!retailer) {
-        console.log("[v0] Retailer creation returned no data")
+        logBusinessError("retailer_creation_no_data", new Error("No retailer data returned"), currentUserId)
         await supabase.auth.admin.deleteUser(authUser.user.id)
         return { error: "Failed to create retailer business: No data returned" }
       }
 
       retailerId = retailer.id
       businessName = retailer.business_name
-      console.log("[v0] Retailer created successfully:", retailerId)
+      logBusinessLogic("create_new_retailer_success", currentUserId, {
+        retailerId,
+        businessName,
+      })
     } else if (userData.businessType === "existing" && userData.existingRetailerId) {
       // Get existing retailer business name
       const { data: existingRetailer } = await supabase
@@ -361,7 +401,7 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
     }
 
     // Create user role assignment
-    console.log("[v0] Creating user role assignment")
+    logDatabaseOperation("insert", "user_roles", { userId: authUser.user.id, role: userData.role })
     const { error: roleError } = await supabase.from("user_roles").insert({
       user_id: authUser.user.id,
       role: userData.role,
@@ -369,11 +409,11 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
     })
 
     if (roleError) {
-      console.log("[v0] Role assignment failed:", roleError)
+      logDatabaseError("insert", "user_roles", roleError, { userId: authUser.user.id })
       await supabase.auth.admin.deleteUser(authUser.user.id)
       return { error: `Failed to assign user role: ${roleError.message}` }
     }
-    console.log("[v0] User role assigned")
+    logDatabaseOperation("insert_success", "user_roles", { userId: authUser.user.id })
 
     const secureTokenData = await generateInvitationToken(userData.email, 168) // 7 days instead of 24 hours
     const invitationToken = secureTokenData.token
@@ -393,11 +433,11 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
     })
 
     if (invitationError) {
-      console.error("Failed to create invitation record:", invitationError)
+      logDatabaseError("insert", "user_invitations", invitationError, { email: userData.email })
       // Don't fail the entire operation for this
     }
 
-    console.log("[v0] Sending custom invitation email")
+    logBusinessLogic("send_invitation_email", currentUserId, { email: userData.email })
     const setupUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/auth/setup-account?token=${invitationToken}&email=${encodeURIComponent(userData.email)}`
 
     const emailResult = await sendInvitationEmail({
@@ -410,7 +450,9 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
     })
 
     if (!emailResult.success) {
-      console.error("Failed to send invitation email:", emailResult.error)
+      logBusinessError("send_invitation_email_failed", new Error(emailResult.error), currentUserId, {
+        email: userData.email,
+      })
       await supabase
         .from("user_invitations")
         .update({
@@ -421,7 +463,10 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
         })
         .eq("email", userData.email)
     } else {
-      console.log("[v0] Custom invitation email sent successfully")
+      logBusinessLogic("send_invitation_email_success", currentUserId, {
+        email: userData.email,
+        emailId: emailResult.emailId,
+      })
       await supabase
         .from("user_invitations")
         .update({
@@ -450,13 +495,17 @@ export async function createUserFromAdmin(userData: AdminCreateUserData) {
     })
 
     revalidatePath("/dashboard/admin/users")
+    logServerAction(`${actionName}_success`, currentUserId, {
+      newUserId: authUser.user.id,
+      email: userData.email,
+    })
     return {
       success: "User created successfully and invitation sent",
       userId: authUser.user.id,
       email: userData.email,
     }
   } catch (error) {
-    console.error("[v0] Unexpected error in createUserFromAdmin:", error)
+    logServerActionError(actionName, error instanceof Error ? error : new Error(String(error)), currentUserId)
     if (error instanceof Error) {
       return { error: `Unexpected error: ${error.message}` }
     }
@@ -551,28 +600,34 @@ export async function resetUserPassword(userId: string) {
 }
 
 export async function resendInvitation(userId: string) {
+  const actionName = "resendInvitation"
+  let currentUserId: string | undefined
+
   try {
-    console.log("[v0] Starting resend invitation for user:", userId)
+    logServerAction(actionName, undefined, { targetUserId: userId })
 
     const supabase = createServiceClient()
     if (!supabase) {
-      console.log("[v0] Service client not configured")
+      logServerActionError(actionName, new Error("Service client not configured"))
       return { error: "Service client not configured" }
     }
 
     const currentUser = await getCurrentUser()
-    console.log("[v0] Current user:", currentUser?.email, currentUser?.role)
+    currentUserId = currentUser?.id
+    logAuthOperation("getCurrentUser", currentUserId, { action: actionName })
 
     if (!currentUser || !["admin", "office"].includes(currentUser.role)) {
-      console.log("[v0] Unauthorized user")
+      logAuthError("unauthorized_access", new Error("Unauthorized user"), currentUserId, {
+        userRole: currentUser?.role,
+      })
       return { error: "Unauthorized to resend invitations" }
     }
 
     // Get user details with role and business info
-    console.log("[v0] Getting user details for:", userId)
+    logDatabaseOperation("getUserById", "auth.users", { userId })
     const { data: user, error: userError } = await supabase.auth.admin.getUserById(userId)
     if (userError || !user.user?.email) {
-      console.log("[v0] User not found:", userError)
+      logDatabaseError("getUserById", "auth.users", userError || new Error("No user email"), { userId })
       return { error: "User not found" }
     }
 
@@ -583,7 +638,7 @@ export async function resendInvitation(userId: string) {
       .single()
 
     if (profileError) {
-      console.log("[v0] Failed to get user profile:", profileError)
+      logDatabaseError("select", "user_profiles", profileError, { userId })
       return { error: "Failed to get user details" }
     }
 
@@ -594,7 +649,7 @@ export async function resendInvitation(userId: string) {
       .single()
 
     if (roleError) {
-      console.log("[v0] Failed to get user role:", roleError)
+      logDatabaseError("select", "user_roles", roleError, { userId })
       return { error: "Failed to get user role" }
     }
 
@@ -610,7 +665,10 @@ export async function resendInvitation(userId: string) {
     }
 
     if (userProfile.email_verified_at) {
-      console.log("[v0] User has already verified email")
+      logBusinessError("user_already_verified", new Error("User already verified"), currentUserId, {
+        userId,
+        email: user.user.email,
+      })
       return { error: "User has already completed account setup" }
     }
 
@@ -627,13 +685,13 @@ export async function resendInvitation(userId: string) {
       .eq("email", user.user.email)
 
     if (updateTokenError) {
-      console.log("[v0] Failed to update invitation token:", updateTokenError)
+      logDatabaseError("update", "user_invitations", updateTokenError, { email: user.user.email })
       return { error: "Failed to update invitation token" }
     }
 
     const resetUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/auth/setup-account?token=${newInvitationToken}&email=${encodeURIComponent(user.user.email)}&type=reset`
 
-    console.log("[v0] Sending custom password reset email")
+    logBusinessLogic("send_password_reset_email", currentUserId, { email: user.user.email })
     const emailResult = await sendPasswordResetEmail({
       to: user.user.email,
       resetUrl,
@@ -644,7 +702,9 @@ export async function resendInvitation(userId: string) {
     })
 
     if (!emailResult.success) {
-      console.log("[v0] Failed to send password reset email:", emailResult.error)
+      logBusinessError("send_password_reset_email_failed", new Error(emailResult.error), currentUserId, {
+        email: user.user.email,
+      })
       await supabase
         .from("user_invitations")
         .update({
@@ -655,7 +715,10 @@ export async function resendInvitation(userId: string) {
         .eq("email", user.user.email)
       return { error: `Failed to send invitation email: ${emailResult.error}` }
     }
-    console.log("[v0] Custom password reset email sent successfully")
+    logBusinessLogic("send_password_reset_email_success", currentUserId, {
+      email: user.user.email,
+      emailId: emailResult.emailId,
+    })
 
     // Update invitation record
     const { data: currentInvitation, error: getInvitationError } = await supabase
@@ -665,7 +728,10 @@ export async function resendInvitation(userId: string) {
       .single()
 
     const currentResentCount = currentInvitation?.resent_count || 0
-    console.log("[v0] Current resent count:", currentResentCount)
+    logDatabaseOperation("update", "user_invitations", {
+      email: user.user.email,
+      currentResentCount,
+    })
 
     const { error: updateError } = await supabase
       .from("user_invitations")
@@ -681,10 +747,10 @@ export async function resendInvitation(userId: string) {
       .eq("email", user.user.email)
 
     if (updateError) {
-      console.log("[v0] Failed to update invitation record:", updateError)
+      logDatabaseError("update", "user_invitations", updateError, { email: user.user.email })
       // Don't fail the operation for this
     } else {
-      console.log("[v0] Updated invitation record successfully")
+      logDatabaseOperation("update_success", "user_invitations", { email: user.user.email })
     }
 
     // Log audit trail
@@ -696,10 +762,13 @@ export async function resendInvitation(userId: string) {
       new_data: { action: "invitation_resent", email: user.user.email },
     })
 
-    console.log("[v0] Resend invitation completed successfully")
+    logServerAction(`${actionName}_success`, currentUserId, {
+      targetUserId: userId,
+      email: user.user.email,
+    })
     return { success: "Invitation resent successfully" }
   } catch (error) {
-    console.error("[v0] Error resending invitation:", error)
+    logServerActionError(actionName, error instanceof Error ? error : new Error(String(error)), currentUserId)
     return { error: "An unexpected error occurred" }
   }
 }

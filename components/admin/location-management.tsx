@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useTransition } from "react"
+import { useState, useTransition } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -26,6 +26,7 @@ import {
   toggleLocationStatus,
   type LocationData,
 } from "@/lib/actions/location-management"
+import { useCachedData } from "@/hooks/use-cached-data"
 
 interface Location {
   id: string
@@ -61,13 +62,26 @@ interface Retailer {
 }
 
 export function LocationManagement() {
-  const [locations, setLocations] = useState<Location[]>([])
-  const [retailers, setRetailers] = useState<Retailer[]>([])
-  const [isLoading, setIsLoading] = useState(true)
   const [isPending, startTransition] = useTransition()
   const [result, setResult] = useState<{ success?: string; error?: string } | null>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [editingLocation, setEditingLocation] = useState<Location | null>(null)
+
+  const {
+    data: locations = [],
+    isLoading: locationsLoading,
+    refetch: refetchLocations,
+  } = useCachedData("locations", getLocationsWithRetailers, {
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    cacheTime: 10 * 60 * 1000, // 10 minutes
+  })
+
+  const { data: retailers = [], isLoading: retailersLoading } = useCachedData("retailers", getRetailers, {
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    cacheTime: 15 * 60 * 1000, // 15 minutes
+  })
+
+  const isLoading = locationsLoading || retailersLoading
 
   const [formData, setFormData] = useState<LocationData>({
     name: "",
@@ -85,29 +99,6 @@ export function LocationManagement() {
       sunday: { closed: true },
     },
   })
-
-  useEffect(() => {
-    loadData()
-  }, [])
-
-  const loadData = async () => {
-    setIsLoading(true)
-    try {
-      const [locationsResult, retailersResult] = await Promise.all([getLocationsWithRetailers(), getRetailers()])
-
-      if (locationsResult.success && locationsResult.locations) {
-        setLocations(locationsResult.locations)
-      }
-
-      if (retailersResult.success && retailersResult.retailers) {
-        setRetailers(retailersResult.retailers)
-      }
-    } catch (error) {
-      setResult({ error: "Failed to load data" })
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
   const handleCreateLocation = () => {
     startTransition(async () => {
@@ -133,7 +124,7 @@ export function LocationManagement() {
               sunday: { closed: true },
             },
           })
-          loadData()
+          refetchLocations()
         }
       } catch (error) {
         setResult({ error: "An unexpected error occurred" })
@@ -151,7 +142,7 @@ export function LocationManagement() {
 
         if (result.success) {
           setEditingLocation(null)
-          loadData()
+          refetchLocations()
         }
       } catch (error) {
         setResult({ error: "An unexpected error occurred" })
@@ -166,7 +157,7 @@ export function LocationManagement() {
         setResult(result)
 
         if (result.success) {
-          loadData()
+          refetchLocations()
         }
       } catch (error) {
         setResult({ error: "An unexpected error occurred" })
