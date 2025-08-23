@@ -21,6 +21,7 @@ export interface UserCreationResult {
   }
   error?: string
   redirectUrl?: string
+  details?: string
 }
 
 export class UserService {
@@ -73,7 +74,19 @@ export class UserService {
       }
 
       // Check if user already exists
-      const { data: existingUser } = await this.supabase.auth.admin.getUserByEmail(data.email)
+      let existingUser
+      try {
+        console.log("[v0] UserService: Looking up existing user...")
+        const result = await this.supabase.auth.admin.getUserByEmail(data.email)
+        existingUser = result.data
+        console.log("[v0] UserService: User lookup result:", { found: !!existingUser?.user })
+      } catch (lookupError) {
+        console.error("[v0] UserService: User lookup failed:", lookupError)
+        return {
+          success: false,
+          error: `User lookup failed: ${lookupError instanceof Error ? lookupError.message : "Unknown error"}`,
+        }
+      }
 
       let authUser
       if (existingUser?.user) {
@@ -99,17 +112,30 @@ export class UserService {
           updateData.user_metadata.invitation_token = data.invitationToken
         }
 
-        const { data: updateResult, error: updateError } = await this.supabase.auth.admin.updateUserById(
-          existingUser.user.id,
-          updateData,
-        )
+        try {
+          console.log("[v0] UserService: Updating user with data:", {
+            userId: existingUser.user.id,
+            hasPassword: !!data.password,
+          })
+          const { data: updateResult, error: updateError } = await this.supabase.auth.admin.updateUserById(
+            existingUser.user.id,
+            updateData,
+          )
 
-        if (updateError) {
-          console.log("[v0] UserService: User update failed:", updateError)
-          return { success: false, error: updateError.message || "Failed to update user" }
+          if (updateError) {
+            console.log("[v0] UserService: User update failed:", updateError)
+            return { success: false, error: updateError.message || "Failed to update user" }
+          }
+
+          authUser = updateResult.user
+          console.log("[v0] UserService: User update successful")
+        } catch (updateException) {
+          console.error("[v0] UserService: User update exception:", updateException)
+          return {
+            success: false,
+            error: `User update failed: ${updateException instanceof Error ? updateException.message : "Unknown error"}`,
+          }
         }
-
-        authUser = updateResult.user
       } else {
         if (data.isInvitationAcceptance) {
           console.log("[v0] UserService: User not found for invitation acceptance")
@@ -149,6 +175,7 @@ export class UserService {
       }
 
       try {
+        console.log("[v0] UserService: Starting database operations...")
         // Update profile and role in parallel
         const [profileResult, roleResult] = await Promise.all([
           this.supabase.from("user_profiles").upsert({
@@ -174,7 +201,11 @@ export class UserService {
         if (roleResult.error) {
           throw new Error(`Role assignment failed: ${roleResult.error.message}`)
         }
+
+        console.log("[v0] UserService: Database operations completed successfully")
       } catch (dbError) {
+        console.error("[v0] UserService: Database operations failed:", dbError)
+
         // If database operations fail, we should clean up the auth user (only for new user creation)
         if (!existingUser?.user) {
           console.error("[v0] Database operations failed, cleaning up auth user:", dbError)
@@ -186,7 +217,10 @@ export class UserService {
           }
         }
 
-        return { success: false, error: dbError instanceof Error ? dbError.message : "Database operation failed" }
+        return {
+          success: false,
+          error: `Database operation failed: ${dbError instanceof Error ? dbError.message : "Unknown database error"}`,
+        }
       }
 
       const redirectUrl = this.getRedirectUrlForRole(data.role)
@@ -203,7 +237,11 @@ export class UserService {
       }
     } catch (error) {
       console.error("[v0] UserService: Unexpected error:", error)
-      return { success: false, error: "An unexpected error occurred" }
+      return {
+        success: false,
+        error: `Unexpected error: ${error instanceof Error ? error.message : "Unknown error"}`,
+        details: error instanceof Error ? error.stack : undefined,
+      }
     }
   }
 
