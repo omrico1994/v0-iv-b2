@@ -167,7 +167,7 @@ export function UserManagementDashboard() {
         setResult(result)
 
         if (result.success) {
-          loadUsers()
+          await loadUsers()
         }
       } catch (error) {
         setResult({ error: "An unexpected error occurred" })
