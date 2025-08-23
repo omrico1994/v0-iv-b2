@@ -36,9 +36,27 @@ export class UserService {
     try {
       console.log("[v0] UserService: Starting user creation/update:", { email: data.email, role: data.role })
 
-      // Validate required fields
-      if (!data.email || !data.firstName || !data.lastName || !data.role) {
-        return { success: false, error: "Missing required fields" }
+      const missingFields = []
+      if (!data.email?.trim()) missingFields.push("email")
+      if (!data.firstName?.trim()) missingFields.push("firstName")
+      if (!data.role?.trim()) missingFields.push("role")
+
+      // lastName can be empty string, so only check if it's null/undefined
+      if (data.lastName === null || data.lastName === undefined) {
+        missingFields.push("lastName")
+      }
+
+      console.log("[v0] UserService: Field validation:", {
+        email: data.email,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        role: data.role,
+        missingFields,
+      })
+
+      if (missingFields.length > 0) {
+        console.log("[v0] UserService: Missing required fields:", missingFields)
+        return { success: false, error: `Missing required fields: ${missingFields.join(", ")}` }
       }
 
       // Check if user already exists
