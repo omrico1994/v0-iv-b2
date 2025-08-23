@@ -11,8 +11,8 @@ export interface TokenValidation {
   payload?: any
 }
 
-export async function generateInvitationToken(email: string, expirationHours = 24): Promise<SecureToken> {
-  const expiresAt = new Date(Date.now() + expirationHours * 60 * 60 * 1000)
+export async function generateInvitationToken(email: string, expirationDays = 7): Promise<SecureToken> {
+  const expiresAt = new Date(Date.now() + expirationDays * 24 * 60 * 60 * 1000)
 
   const payload = {
     email,
@@ -95,9 +95,4 @@ export async function createSecureInvitationToken(payload: {
     .sign(secret)
 
   return token
-}
-
-// Keep for backward compatibility
-export function generateSecureToken(): string {
-  return crypto.randomUUID()
 }

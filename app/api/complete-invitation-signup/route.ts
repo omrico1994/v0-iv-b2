@@ -27,21 +27,24 @@ export async function POST(request: NextRequest) {
       console.log("[v0] Missing fields detected:", missingFields)
       return NextResponse.json(
         {
+          success: false,
           error: "Missing required fields",
-          version: "v2.0",
           missing: missingFields,
-          received: {
-            token: token ? `${token.substring(0, 20)}...` : token,
-            email: email,
-            password: password ? `[${password.length} chars]` : password,
-          },
+          code: "VALIDATION_ERROR",
         },
         { status: 400 },
       )
     }
 
     if (password.length < 8) {
-      return NextResponse.json({ error: "Password must be at least 8 characters long" }, { status: 400 })
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Password must be at least 8 characters long",
+          code: "PASSWORD_TOO_SHORT",
+        },
+        { status: 400 },
+      )
     }
 
     const userService = new UserService()
@@ -52,7 +55,14 @@ export async function POST(request: NextRequest) {
     if (!validation.valid) {
       console.log("[v0] Invitation validation failed:", validation.error)
       const statusCode = validation.error?.includes("expired") ? 410 : 400
-      return NextResponse.json({ error: validation.error }, { status: statusCode })
+      return NextResponse.json(
+        {
+          success: false,
+          error: validation.error,
+          code: validation.error?.includes("expired") ? "TOKEN_EXPIRED" : "INVALID_TOKEN",
+        },
+        { status: statusCode },
+      )
     }
 
     const invitation = validation.invitation!
@@ -71,15 +81,20 @@ export async function POST(request: NextRequest) {
 
     if (!result.success) {
       console.log("[v0] User creation/update failed:", result.error)
-      return NextResponse.json({ error: result.error }, { status: 400 })
+      return NextResponse.json(
+        {
+          success: false,
+          error: result.error,
+          code: "USER_CREATION_FAILED",
+        },
+        { status: 400 },
+      )
     }
 
     console.log("[v0] Completing invitation...")
     const completion = await userService.completeInvitation(token)
-
     if (!completion.success) {
       console.error("[v0] Invitation completion failed:", completion.error)
-      // Don't fail the entire operation for this
     }
 
     console.log("[v0] Account setup completed successfully")
@@ -94,8 +109,9 @@ export async function POST(request: NextRequest) {
     console.error("[v0] Complete invitation signup error:", error)
     return NextResponse.json(
       {
+        success: false,
         error: "Internal server error",
-        version: "v2.0",
+        code: "INTERNAL_ERROR",
       },
       { status: 500 },
     )

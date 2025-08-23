@@ -112,35 +112,45 @@ export class UserService {
         authUser = createResult.user
       }
 
-      // Update or create user profile
-      const { error: profileError } = await this.supabase.from("user_profiles").upsert({
-        id: authUser.id,
-        first_name: data.firstName,
-        last_name: data.lastName,
-        phone: data.phone,
-        email_verified_at: data.password ? new Date().toISOString() : null,
-        last_login_at: data.password ? new Date().toISOString() : null,
-        business_setup_completed: data.role === "admin" || data.role === "office",
-      })
+      try {
+        // Update profile and role in parallel
+        const [profileResult, roleResult] = await Promise.all([
+          this.supabase.from("user_profiles").upsert({
+            id: authUser.id,
+            first_name: data.firstName,
+            last_name: data.lastName,
+            phone: data.phone,
+            email_verified_at: data.password ? new Date().toISOString() : null,
+            last_login_at: data.password ? new Date().toISOString() : null,
+            business_setup_completed: data.role === "admin" || data.role === "office",
+          }),
+          this.supabase.from("user_roles").upsert({
+            user_id: authUser.id,
+            role: data.role,
+            retailer_id: data.retailerId || null,
+          }),
+        ])
 
-      if (profileError) {
-        console.log("[v0] UserService: Profile upsert failed:", profileError)
-        return { success: false, error: `Failed to update user profile: ${profileError.message}` }
+        if (profileResult.error) {
+          throw new Error(`Profile update failed: ${profileResult.error.message}`)
+        }
+
+        if (roleResult.error) {
+          throw new Error(`Role assignment failed: ${roleResult.error.message}`)
+        }
+      } catch (dbError) {
+        // If database operations fail, we should clean up the auth user
+        console.error("[v0] Database operations failed, cleaning up auth user:", dbError)
+
+        try {
+          await this.supabase.auth.admin.deleteUser(authUser.id)
+        } catch (cleanupError) {
+          console.error("[v0] Failed to cleanup auth user:", cleanupError)
+        }
+
+        return { success: false, error: dbError instanceof Error ? dbError.message : "Database operation failed" }
       }
 
-      // Update or create user role
-      const { error: roleError } = await this.supabase.from("user_roles").upsert({
-        user_id: authUser.id,
-        role: data.role,
-        retailer_id: data.retailerId || null,
-      })
-
-      if (roleError) {
-        console.log("[v0] UserService: Role upsert failed:", roleError)
-        return { success: false, error: `Failed to assign user role: ${roleError.message}` }
-      }
-
-      // Determine redirect URL based on role
       const redirectUrl = this.getRedirectUrlForRole(data.role)
 
       console.log("[v0] UserService: User creation/update completed successfully")

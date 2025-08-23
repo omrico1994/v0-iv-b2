@@ -50,8 +50,7 @@ export const createClient = cache(() => {
 // Create service role client for admin operations
 export const createServiceClient = () => {
   if (!isSupabaseConfigured || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    console.warn("Supabase service role key not configured.")
-    return null
+    throw new Error("Supabase service role key not configured. Please check your environment variables.")
   }
 
   return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
