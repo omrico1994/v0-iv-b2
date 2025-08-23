@@ -84,8 +84,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: result.error,
+          error: result.error || "User creation failed",
           code: "USER_CREATION_FAILED",
+          details: result.details || undefined,
         },
         { status: 400 },
       )
@@ -110,8 +111,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: "Internal server error",
+        error: error instanceof Error ? error.message : "Internal server error",
         code: "INTERNAL_ERROR",
+        stack: process.env.NODE_ENV === "development" ? (error instanceof Error ? error.stack : undefined) : undefined,
       },
       { status: 500 },
     )
