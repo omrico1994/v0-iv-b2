@@ -360,7 +360,7 @@ export function AccountSetupForm() {
 
           console.log("[v0] Invitation signup successful, signing in user...")
 
-          await new Promise((resolve) => setTimeout(resolve, 1000))
+          await new Promise((resolve) => setTimeout(resolve, 2000))
 
           const { error: signInError } = await supabase.auth.signInWithPassword({
             email: userEmail,
@@ -371,7 +371,7 @@ export function AccountSetupForm() {
             console.log("[v0] Auto sign-in error:", signInError)
             setError(null)
             setRecoveryActions([])
-            router.push("/auth/login?message=Account created successfully. Please sign in with your new password.")
+            router.push("/auth/login?message=Account created successfully! Please sign in with your new password.")
             return
           }
 
