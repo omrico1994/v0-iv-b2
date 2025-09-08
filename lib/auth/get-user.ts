@@ -21,7 +21,7 @@ export interface UserWithRole {
 }
 
 export async function getCurrentUser(): Promise<UserWithRole | null> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   try {
     const {
