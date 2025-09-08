@@ -6,7 +6,6 @@ import { Manrope } from "next/font/google"
 import { ThemeProvider } from "next-themes"
 import "./globals.css"
 
-const geist = GeistSans({ subsets: ["latin"] })
 const manrope = Manrope({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
@@ -21,7 +20,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={`${geist.variable} ${manrope.variable} antialiased`}>
+    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable} ${manrope.variable} antialiased`}>
       <head>
         <style>{`
 html {
