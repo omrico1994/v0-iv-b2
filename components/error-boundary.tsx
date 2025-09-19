@@ -21,12 +21,17 @@ interface State {
   error?: Error
   errorInfo?: any
   errorId?: string
+  isClient: boolean
 }
 
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props)
-    this.state = { hasError: false }
+    this.state = { hasError: false, isClient: false }
+  }
+
+  componentDidMount() {
+    this.setState({ isClient: true })
   }
 
   static getDerivedStateFromError(error: Error): State {
@@ -35,32 +40,30 @@ export class ErrorBoundary extends Component<Props, State> {
       hasError: true,
       error,
       errorId,
+      isClient: false, // Will be updated in componentDidMount
     }
   }
 
   componentDidCatch(error: Error, errorInfo: any) {
     const errorId = this.state.errorId || `error_${Date.now()}`
 
-    // Log to our structured logger
-    logger.componentError(this.props.component || "Unknown Component", error, {
+    const logData = {
       errorId,
       errorInfo,
       componentStack: errorInfo.componentStack,
       errorBoundary: true,
       timestamp: new Date().toISOString(),
-      userAgent: typeof window !== "undefined" ? window.navigator.userAgent : "server",
-      url: typeof window !== "undefined" ? window.location.href : "server",
-    })
+      userAgent: typeof window !== "undefined" ? window.navigator?.userAgent : "server",
+      url: typeof window !== "undefined" ? window.location?.href : "server",
+    }
 
-    // Call custom error handler if provided
+    logger.componentError(this.props.component || "Unknown Component", error, logData)
+
     if (this.props.onError) {
       this.props.onError(error, errorInfo)
     }
 
-    // In production, you would send this to an error monitoring service
     if (process.env.NODE_ENV === "production") {
-      // Example: Send to Sentry, LogRocket, or other monitoring service
-      // Sentry.captureException(error, { contexts: { errorInfo, errorId } })
       console.error("[ErrorBoundary] Production error captured:", {
         errorId,
         message: error.message,
@@ -88,8 +91,15 @@ export class ErrorBoundary extends Component<Props, State> {
         action: "user_reported_error",
       })
 
-      // In a real app, this would open a support ticket or feedback form
-      alert(`Error reported with ID: ${this.state.errorId}. Our team has been notified.`)
+      if (typeof window !== "undefined") {
+        alert(`Error reported with ID: ${this.state.errorId}. Our team has been notified.`)
+      }
+    }
+  }
+
+  handleGoToDashboard = () => {
+    if (typeof window !== "undefined") {
+      window.location.href = "/dashboard"
     }
   }
 
@@ -153,8 +163,8 @@ export class ErrorBoundary extends Component<Props, State> {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => (window.location.href = "/dashboard")}
-                  className="flex items-center gap-2"
+                  onClick={this.handleGoToDashboard}
+                  className="flex items-center gap-2 bg-transparent"
                 >
                   <Home className="h-4 w-4" />
                   Go to Dashboard
@@ -180,7 +190,6 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-// Higher-order component for easier usage
 export function withErrorBoundary<P extends object>(
   Component: React.ComponentType<P>,
   errorBoundaryProps?: Omit<Props, "children">,
