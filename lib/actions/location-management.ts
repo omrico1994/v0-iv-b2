@@ -30,19 +30,27 @@ export async function getLocationsWithRetailers() {
       return { error: "Unauthorized to view locations" }
     }
 
+    // Optimized query with better join structure and selective fields
     const { data: locations, error } = await supabase
       .from("locations")
       .select(`
-        *,
-        retailers (
+        id,
+        name,
+        full_address,
+        phone,
+        timezone,
+        is_active,
+        operating_hours,
+        created_at,
+        retailers!inner (
           id,
           name,
           business_name
         ),
-        user_location_memberships (
+        user_location_memberships!left (
           user_id,
           is_active,
-          user_profiles (
+          user_profiles!inner (
             first_name,
             last_name,
             user_roles (
@@ -51,9 +59,11 @@ export async function getLocationsWithRetailers() {
           )
         )
       `)
+      .eq("retailers.is_active", true)
       .order("created_at", { ascending: false })
 
     if (error) {
+      console.error("Database error fetching locations:", error)
       return { error: "Failed to fetch locations" }
     }
 
@@ -73,6 +83,7 @@ export async function getRetailers() {
       return { error: "Unauthorized to view retailers" }
     }
 
+    // Simple, efficient query for retailers with proper indexing
     const { data: retailers, error } = await supabase
       .from("retailers")
       .select("id, name, business_name")
@@ -80,6 +91,7 @@ export async function getRetailers() {
       .order("business_name")
 
     if (error) {
+      console.error("Database error fetching retailers:", error)
       return { error: "Failed to fetch retailers" }
     }
 
@@ -163,6 +175,10 @@ export async function updateLocation(locationId: string, locationData: Partial<L
 
     // Get current location data for audit trail
     const { data: currentLocation } = await supabase.from("locations").select("*").eq("id", locationId).single()
+
+    if (!currentLocation) {
+      return { error: "Location not found" }
+    }
 
     // Update location
     const updateData: any = {}

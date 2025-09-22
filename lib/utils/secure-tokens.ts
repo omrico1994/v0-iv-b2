@@ -11,6 +11,24 @@ export interface TokenValidation {
   payload?: any
 }
 
+function getSecretKey(): Uint8Array {
+  const secret = process.env.INVITATION_TOKEN_SECRET || process.env.SUPABASE_JWT_SECRET
+
+  if (!secret) {
+    throw new Error(
+      "Missing required JWT secret. Please set INVITATION_TOKEN_SECRET or SUPABASE_JWT_SECRET environment variable.",
+    )
+  }
+
+  if (secret === "fallback-secret") {
+    throw new Error(
+      "Invalid JWT secret. Please set a secure INVITATION_TOKEN_SECRET or SUPABASE_JWT_SECRET environment variable.",
+    )
+  }
+
+  return new TextEncoder().encode(secret)
+}
+
 export async function generateInvitationToken(email: string, expirationDays = 7): Promise<SecureToken> {
   const expiresAt = new Date(Date.now() + expirationDays * 24 * 60 * 60 * 1000)
 
@@ -21,9 +39,7 @@ export async function generateInvitationToken(email: string, expirationDays = 7)
     exp: Math.floor(expiresAt.getTime() / 1000),
   }
 
-  const secret = new TextEncoder().encode(
-    process.env.INVITATION_TOKEN_SECRET || process.env.SUPABASE_JWT_SECRET || "fallback-secret",
-  )
+  const secret = getSecretKey()
 
   const token = await new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
@@ -39,9 +55,7 @@ export async function generateInvitationToken(email: string, expirationDays = 7)
 
 export async function validateInvitationToken(token: string, email: string): Promise<TokenValidation> {
   try {
-    const secret = new TextEncoder().encode(
-      process.env.INVITATION_TOKEN_SECRET || process.env.SUPABASE_JWT_SECRET || "fallback-secret",
-    )
+    const secret = getSecretKey()
 
     const { payload } = await jwtVerify(token, secret)
 
@@ -84,9 +98,7 @@ export async function createSecureInvitationToken(payload: {
     exp: expirationTime,
   }
 
-  const secret = new TextEncoder().encode(
-    process.env.INVITATION_TOKEN_SECRET || process.env.SUPABASE_JWT_SECRET || "fallback-secret",
-  )
+  const secret = getSecretKey()
 
   const token = await new SignJWT(jwtPayload)
     .setProtectedHeader({ alg: "HS256" })

@@ -5,8 +5,6 @@ export async function POST(request: NextRequest) {
   try {
     const { token, email } = await request.json()
 
-    console.log("[v0] Validation request received:", { token: !!token, email })
-
     if (!token || !email) {
       return NextResponse.json({ valid: false, error: "Token and email are required" }, { status: 400 })
     }
@@ -20,10 +18,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ valid: false, error: validation.error }, { status: statusCode })
     }
 
-    console.log("[v0] Invitation validation successful")
     return NextResponse.json({ valid: true, invitation: validation.invitation })
   } catch (error) {
-    console.error("[v0] Invitation validation error:", error)
+    console.error("Invitation validation error:", error)
     return NextResponse.json({ valid: false, error: "Internal server error" }, { status: 500 })
   }
 }

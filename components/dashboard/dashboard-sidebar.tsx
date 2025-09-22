@@ -1,5 +1,18 @@
 import type { UserWithRole } from "@/lib/auth/get-user"
-import { LayoutDashboard, Users, Settings, FileText, ShoppingCart, MapPin, Building2 } from "lucide-react"
+import {
+  LayoutDashboard,
+  Users,
+  Settings,
+  FileText,
+  Activity,
+  UserCheck,
+  Stethoscope,
+  ClipboardList,
+  Package,
+  BarChart3,
+  Calendar,
+  AlertTriangle,
+} from "lucide-react"
 import { SidebarNavigation } from "./sidebar-navigation"
 
 interface DashboardSidebarProps {
@@ -16,13 +29,38 @@ export function DashboardSidebar({ user }: DashboardSidebarProps) {
       },
     ]
 
-    if (user.role === "admin") {
+    if (user.role === "system_admin") {
       return [
         ...baseItems,
         {
-          name: "User Management",
-          href: "/dashboard/users",
+          name: "Staff Management",
+          href: "/dashboard/staff",
           icon: Users,
+        },
+        {
+          name: "Patient Management",
+          href: "/dashboard/patients",
+          icon: UserCheck,
+        },
+        {
+          name: "IV Sessions",
+          href: "/dashboard/iv-sessions",
+          icon: Activity,
+        },
+        {
+          name: "IV Monitoring",
+          href: "/dashboard/iv-monitoring",
+          icon: Stethoscope,
+        },
+        {
+          name: "Inventory",
+          href: "/dashboard/inventory",
+          icon: Package,
+        },
+        {
+          name: "Reports",
+          href: "/dashboard/reports",
+          icon: BarChart3,
         },
         {
           name: "System Settings",
@@ -34,68 +72,139 @@ export function DashboardSidebar({ user }: DashboardSidebarProps) {
           href: "/dashboard/audit",
           icon: FileText,
         },
-        {
-          name: "Retailers",
-          href: "/dashboard/retailers",
-          icon: Building2,
-        },
       ]
     }
 
-    if (user.role === "office") {
+    if (user.role === "medical_director" || user.role === "department_head") {
       return [
         ...baseItems,
         {
-          name: "Reports",
-          href: "/dashboard/reports",
-          icon: FileText,
+          name: "Staff Management",
+          href: "/dashboard/staff",
+          icon: Users,
         },
         {
-          name: "Audit Logs",
-          href: "/dashboard/audit",
-          icon: FileText,
+          name: "Patient Management",
+          href: "/dashboard/patients",
+          icon: UserCheck,
         },
         {
-          name: "Retailers",
-          href: "/dashboard/retailers",
-          icon: Building2,
-        },
-      ]
-    }
-
-    if (user.role === "retailer") {
-      return [
-        ...baseItems,
-        {
-          name: "Locations",
-          href: "/dashboard/locations",
-          icon: MapPin,
+          name: "IV Sessions",
+          href: "/dashboard/iv-sessions",
+          icon: Activity,
         },
         {
-          name: "Orders",
-          href: "/dashboard/orders",
-          icon: ShoppingCart,
+          name: "IV Monitoring",
+          href: "/dashboard/iv-monitoring",
+          icon: Stethoscope,
+        },
+        {
+          name: "Inventory",
+          href: "/dashboard/inventory",
+          icon: Package,
         },
         {
           name: "Reports",
           href: "/dashboard/reports",
-          icon: FileText,
+          icon: BarChart3,
+        },
+        {
+          name: "Schedule",
+          href: "/dashboard/schedule",
+          icon: Calendar,
         },
       ]
     }
 
-    if (user.role === "location_user") {
+    if (user.role === "doctor") {
       return [
         ...baseItems,
         {
-          name: "Orders",
-          href: "/dashboard/orders",
-          icon: ShoppingCart,
+          name: "My Patients",
+          href: "/dashboard/patients",
+          icon: UserCheck,
         },
         {
-          name: "My Locations",
-          href: "/dashboard/my-locations",
-          icon: MapPin,
+          name: "IV Sessions",
+          href: "/dashboard/iv-sessions",
+          icon: Activity,
+        },
+        {
+          name: "IV Monitoring",
+          href: "/dashboard/iv-monitoring",
+          icon: Stethoscope,
+        },
+        {
+          name: "Schedule",
+          href: "/dashboard/schedule",
+          icon: Calendar,
+        },
+        {
+          name: "Reports",
+          href: "/dashboard/reports",
+          icon: BarChart3,
+        },
+      ]
+    }
+
+    if (user.role === "nurse") {
+      return [
+        ...baseItems,
+        {
+          name: "My Patients",
+          href: "/dashboard/patients",
+          icon: UserCheck,
+        },
+        {
+          name: "IV Sessions",
+          href: "/dashboard/iv-sessions",
+          icon: Activity,
+        },
+        {
+          name: "IV Monitoring",
+          href: "/dashboard/iv-monitoring",
+          icon: Stethoscope,
+        },
+        {
+          name: "Tasks",
+          href: "/dashboard/tasks",
+          icon: ClipboardList,
+        },
+        {
+          name: "Alerts",
+          href: "/dashboard/alerts",
+          icon: AlertTriangle,
+        },
+        {
+          name: "Schedule",
+          href: "/dashboard/schedule",
+          icon: Calendar,
+        },
+      ]
+    }
+
+    if (user.role === "technician") {
+      return [
+        ...baseItems,
+        {
+          name: "IV Monitoring",
+          href: "/dashboard/iv-monitoring",
+          icon: Stethoscope,
+        },
+        {
+          name: "Equipment",
+          href: "/dashboard/equipment",
+          icon: Package,
+        },
+        {
+          name: "Tasks",
+          href: "/dashboard/tasks",
+          icon: ClipboardList,
+        },
+        {
+          name: "Alerts",
+          href: "/dashboard/alerts",
+          icon: AlertTriangle,
         },
       ]
     }
@@ -108,7 +217,7 @@ export function DashboardSidebar({ user }: DashboardSidebarProps) {
   return (
     <div className="w-64 bg-gray-50 border-r border-gray-200">
       <div className="p-6">
-        <h2 className="text-lg font-semibold text-gray-900">Business Portal</h2>
+        <h2 className="text-lg font-semibold text-gray-900">IV Management System</h2>
         <p className="text-sm text-gray-600">{user.role.replace("_", " ").toUpperCase()}</p>
       </div>
 

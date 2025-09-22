@@ -6,13 +6,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { token, email, password } = body
 
-    console.log("[v0] Complete invitation signup request:", {
-      hasToken: !!token,
-      email,
-      hasPassword: !!password,
-      passwordLength: password?.length || 0,
-    })
-
     const missingFields = []
     if (!token) missingFields.push("token")
     if (!email) missingFields.push("email")
@@ -43,11 +36,9 @@ export async function POST(request: NextRequest) {
 
     const userService = new UserService()
 
-    console.log("[v0] Validating invitation...")
     const validation = await userService.validateInvitation(token, email)
 
     if (!validation.valid) {
-      console.log("[v0] Invitation validation failed:", validation.error)
       const statusCode = validation.error?.includes("expired") ? 410 : 400
       return NextResponse.json(
         {
@@ -61,7 +52,6 @@ export async function POST(request: NextRequest) {
 
     const invitation = validation.invitation!
 
-    console.log("[v0] Creating/updating user...")
     const result = await userService.createOrUpdateUser({
       email: email,
       firstName: invitation.first_name || email.split("@")[0],
@@ -75,7 +65,6 @@ export async function POST(request: NextRequest) {
     })
 
     if (!result.success) {
-      console.log("[v0] User creation/update failed:", result.error)
       return NextResponse.json(
         {
           success: false,
@@ -87,13 +76,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log("[v0] Completing invitation...")
     const completion = await userService.completeInvitation(token)
     if (!completion.success) {
-      console.error("[v0] Invitation completion failed:", completion.error)
+      console.error("Invitation completion failed:", completion.error)
     }
-
-    console.log("[v0] Account setup completed successfully")
 
     return NextResponse.json({
       success: true,
@@ -102,7 +88,7 @@ export async function POST(request: NextRequest) {
       user: result.user,
     })
   } catch (error) {
-    console.error("[v0] Complete invitation signup error:", error)
+    console.error("Complete invitation signup error:", error)
     return NextResponse.json(
       {
         success: false,

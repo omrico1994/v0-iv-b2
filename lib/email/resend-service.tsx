@@ -177,17 +177,8 @@ function getPasswordResetTemplate(params: SendPasswordResetEmailParams): string 
 
 export async function sendInvitationEmail(params: SendInvitationEmailParams): Promise<EmailResult> {
   try {
-    console.log("[v0] Sending invitation email to:", params.to)
-    console.log("[v0] Email params:", {
-      firstName: params.firstName,
-      lastName: params.lastName,
-      role: params.role,
-      businessName: params.businessName,
-      setupUrl: params.setupUrl,
-    })
-
     if (!process.env.RESEND_API_KEY) {
-      console.error("[v0] RESEND_API_KEY not found")
+      console.error("RESEND_API_KEY not found")
       return { success: false, error: "Email service not configured" }
     }
 
@@ -203,14 +194,13 @@ export async function sendInvitationEmail(params: SendInvitationEmailParams): Pr
     })
 
     if (error) {
-      console.error("[v0] Resend API error:", error)
+      console.error("Resend API error:", error)
       return { success: false, error: error.message || "Failed to send email" }
     }
 
-    console.log("[v0] Email sent successfully:", data?.id)
     return { success: true, emailId: data?.id }
   } catch (error) {
-    console.error("[v0] Email sending error:", error)
+    console.error("Email sending error:", error)
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error occurred",
@@ -220,17 +210,8 @@ export async function sendInvitationEmail(params: SendInvitationEmailParams): Pr
 
 export async function sendPasswordResetEmail(params: SendPasswordResetEmailParams): Promise<EmailResult> {
   try {
-    console.log("[v0] Sending password reset email to:", params.to)
-    console.log("[v0] Reset params:", {
-      firstName: params.firstName,
-      lastName: params.lastName,
-      role: params.role,
-      businessName: params.businessName,
-      resetUrl: params.resetUrl,
-    })
-
     if (!process.env.RESEND_API_KEY) {
-      console.error("[v0] RESEND_API_KEY not found")
+      console.error("RESEND_API_KEY not found")
       return { success: false, error: "Email service not configured" }
     }
 
@@ -246,14 +227,13 @@ export async function sendPasswordResetEmail(params: SendPasswordResetEmailParam
     })
 
     if (error) {
-      console.error("[v0] Resend API error:", error)
+      console.error("Resend API error:", error)
       return { success: false, error: error.message || "Failed to send email" }
     }
 
-    console.log("[v0] Password reset email sent successfully:", data?.id)
     return { success: true, emailId: data?.id }
   } catch (error) {
-    console.error("[v0] Password reset email error:", error)
+    console.error("Password reset email error:", error)
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error occurred",

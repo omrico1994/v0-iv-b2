@@ -24,14 +24,9 @@ function LoginFormContent() {
     setIsLoading(true)
     setError(null)
 
-    console.log("[v0] Login form submitted at:", new Date().toISOString())
-
     const formData = new FormData(event.currentTarget)
     const email = formData.get("email") as string
     const password = formData.get("password") as string
-
-    console.log("[v0] Email:", email)
-    console.log("[v0] Starting client-side authentication...")
 
     if (!email || !password) {
       setError("Email and password are required")
@@ -42,25 +37,20 @@ function LoginFormContent() {
     try {
       const supabase = createClient()
 
-      console.log("[v0] Attempting sign in with password...")
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
       if (authError) {
-        console.log("[v0] Sign in error:", authError.message)
         setError("Invalid email or password")
         setIsLoading(false)
         return
       }
 
-      console.log("[v0] Sign in successful, user ID:", authData.user?.id)
-      console.log("[v0] Redirecting to dashboard...")
-
       router.push("/dashboard")
     } catch (error) {
-      console.error("[v0] Authentication error:", error)
+      console.error("Authentication error:", error)
       setError("Authentication failed. Please try again.")
       setIsLoading(false)
     }

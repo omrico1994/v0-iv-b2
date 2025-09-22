@@ -1,519 +1,294 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { MapPin, Plus, Edit, Users, Phone, Building, AlertCircle, Loader2, ToggleLeft, ToggleRight } from "lucide-react"
-import {
-  getLocationsWithRetailers,
-  getRetailers,
-  createLocation,
-  updateLocation,
-  toggleLocationStatus,
-  type LocationData,
-} from "@/lib/actions/location-management"
-import { useCachedData } from "@/hooks/use-cached-data"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { MapPin, Plus, Search, Edit, Trash2, Building2, Users } from "lucide-react"
+import type { UserWithRole } from "@/lib/auth/get-user"
 
-interface Location {
-  id: string
-  name: string
-  full_address: string
-  phone?: string
-  timezone: string
-  is_active: boolean
-  operating_hours?: any
-  created_at: string
-  retailers: {
-    id: string
-    name: string
-    business_name: string
-  }
-  user_location_memberships: Array<{
-    user_id: string
-    is_active: boolean
-    user_profiles: {
-      first_name: string
-      last_name: string
-      user_roles: Array<{
-        role: string
-      }>
+interface LocationManagementProps {
+  user: UserWithRole
+}
+
+// Mock location data
+const mockLocationData = [
+  {
+    id: "1",
+    name: "Main Hospital - ICU",
+    address: "123 Medical Center Dr, City, State 12345",
+    type: "hospital",
+    capacity: 50,
+    current_patients: 42,
+    staff_count: 15,
+    status: "active",
+    manager: "Dr. Sarah Johnson",
+    phone: "(555) 123-4567",
+  },
+  {
+    id: "2",
+    name: "Emergency Department",
+    address: "123 Medical Center Dr, City, State 12345",
+    type: "emergency",
+    capacity: 25,
+    current_patients: 18,
+    staff_count: 12,
+    status: "active",
+    manager: "Dr. Mike Rodriguez",
+    phone: "(555) 234-5678",
+  },
+  {
+    id: "3",
+    name: "Outpatient Clinic",
+    address: "456 Healthcare Ave, City, State 12345",
+    type: "clinic",
+    capacity: 30,
+    current_patients: 8,
+    staff_count: 8,
+    status: "maintenance",
+    manager: "Nurse Emily Chen",
+    phone: "(555) 345-6789",
+  },
+]
+
+export function LocationManagement({ user }: LocationManagementProps) {
+  const [searchTerm, setSearchTerm] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [typeFilter, setTypeFilter] = useState("all")
+
+  const filteredLocations = mockLocationData.filter((location) => {
+    const matchesSearch =
+      location.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      location.address.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesStatus = statusFilter === "all" || location.status === statusFilter
+    const matchesType = typeFilter === "all" || location.type === typeFilter
+
+    return matchesSearch && matchesStatus && matchesType
+  })
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "active":
+        return "bg-green-100 text-green-800"
+      case "maintenance":
+        return "bg-yellow-100 text-yellow-800"
+      case "inactive":
+        return "bg-red-100 text-red-800"
+      default:
+        return "bg-gray-100 text-gray-800"
     }
-  }>
-}
-
-interface Retailer {
-  id: string
-  name: string
-  business_name: string
-}
-
-export function LocationManagement() {
-  const [isPending, startTransition] = useTransition()
-  const [result, setResult] = useState<{ success?: string; error?: string } | null>(null)
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [editingLocation, setEditingLocation] = useState<Location | null>(null)
-
-  const {
-    data: locations = [],
-    isLoading: locationsLoading,
-    refetch: refetchLocations,
-  } = useCachedData("locations", getLocationsWithRetailers, {
-    staleTime: 2 * 60 * 1000, // 2 minutes
-    cacheTime: 10 * 60 * 1000, // 10 minutes
-  })
-
-  const { data: retailers = [], isLoading: retailersLoading } = useCachedData("retailers", getRetailers, {
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    cacheTime: 15 * 60 * 1000, // 15 minutes
-  })
-
-  const isLoading = locationsLoading || retailersLoading
-
-  const [formData, setFormData] = useState<LocationData>({
-    name: "",
-    retailerId: "",
-    fullAddress: "",
-    phone: "",
-    timezone: "America/New_York",
-    operatingHours: {
-      monday: { open: "09:00", close: "17:00" },
-      tuesday: { open: "09:00", close: "17:00" },
-      wednesday: { open: "09:00", close: "17:00" },
-      thursday: { open: "09:00", close: "17:00" },
-      friday: { open: "09:00", close: "17:00" },
-      saturday: { closed: true },
-      sunday: { closed: true },
-    },
-  })
-
-  const handleCreateLocation = () => {
-    startTransition(async () => {
-      try {
-        const result = await createLocation(formData)
-        setResult(result)
-
-        if (result.success) {
-          setIsCreateDialogOpen(false)
-          setFormData({
-            name: "",
-            retailerId: "",
-            fullAddress: "",
-            phone: "",
-            timezone: "America/New_York",
-            operatingHours: {
-              monday: { open: "09:00", close: "17:00" },
-              tuesday: { open: "09:00", close: "17:00" },
-              wednesday: { open: "09:00", close: "17:00" },
-              thursday: { open: "09:00", close: "17:00" },
-              friday: { open: "09:00", close: "17:00" },
-              saturday: { closed: true },
-              sunday: { closed: true },
-            },
-          })
-          refetchLocations()
-        }
-      } catch (error) {
-        setResult({ error: "An unexpected error occurred" })
-      }
-    })
   }
 
-  const handleUpdateLocation = () => {
-    if (!editingLocation) return
-
-    startTransition(async () => {
-      try {
-        const result = await updateLocation(editingLocation.id, formData)
-        setResult(result)
-
-        if (result.success) {
-          setEditingLocation(null)
-          refetchLocations()
-        }
-      } catch (error) {
-        setResult({ error: "An unexpected error occurred" })
-      }
-    })
+  const getTypeColor = (type: string) => {
+    switch (type) {
+      case "hospital":
+        return "bg-blue-100 text-blue-800"
+      case "emergency":
+        return "bg-red-100 text-red-800"
+      case "clinic":
+        return "bg-purple-100 text-purple-800"
+      default:
+        return "bg-gray-100 text-gray-800"
+    }
   }
 
-  const handleToggleStatus = (locationId: string) => {
-    startTransition(async () => {
-      try {
-        const result = await toggleLocationStatus(locationId)
-        setResult(result)
-
-        if (result.success) {
-          refetchLocations()
-        }
-      } catch (error) {
-        setResult({ error: "An unexpected error occurred" })
-      }
-    })
-  }
-
-  const openEditDialog = (location: Location) => {
-    setEditingLocation(location)
-    setFormData({
-      name: location.name,
-      retailerId: location.retailers.id,
-      fullAddress: location.full_address,
-      phone: location.phone || "",
-      timezone: location.timezone,
-      operatingHours: location.operating_hours || {
-        monday: { open: "09:00", close: "17:00" },
-        tuesday: { open: "09:00", close: "17:00" },
-        wednesday: { open: "09:00", close: "17:00" },
-        thursday: { open: "09:00", close: "17:00" },
-        friday: { open: "09:00", close: "17:00" },
-        saturday: { closed: true },
-        sunday: { closed: true },
-      },
-    })
-  }
-
-  const resetForm = () => {
-    setFormData({
-      name: "",
-      retailerId: "",
-      fullAddress: "",
-      phone: "",
-      timezone: "America/New_York",
-      operatingHours: {
-        monday: { open: "09:00", close: "17:00" },
-        tuesday: { open: "09:00", close: "17:00" },
-        wednesday: { open: "09:00", close: "17:00" },
-        thursday: { open: "09:00", close: "17:00" },
-        friday: { open: "09:00", close: "17:00" },
-        saturday: { closed: true },
-        sunday: { closed: true },
-      },
-    })
-    setEditingLocation(null)
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    )
+  const getUtilizationPercentage = (current: number, capacity: number) => {
+    return Math.round((current / capacity) * 100)
   }
 
   return (
     <div className="space-y-6">
-      {/* Result Alert */}
-      {result && (
-        <Alert className={result.success ? "border-green-200 bg-green-50" : "border-destructive bg-destructive/10"}>
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription className={result.success ? "text-green-800" : "text-destructive"}>
-            {result.success || result.error}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Header Actions */}
+      {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-semibold">Locations ({locations.length})</h2>
-          <p className="text-muted-foreground">Manage locations across all retailers</p>
+          <h1 className="text-3xl font-semibold text-gray-900">Location Management</h1>
+          <p className="text-gray-600">Manage medical facilities and treatment locations</p>
         </div>
-
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={resetForm}>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Location
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Create New Location</DialogTitle>
-              <DialogDescription>Add a new location to a retailer business.</DialogDescription>
-            </DialogHeader>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Location Name *</Label>
-                <Input
-                  id="name"
-                  placeholder="Downtown Store"
-                  value={formData.name}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="retailer">Retailer *</Label>
-                <Select
-                  value={formData.retailerId}
-                  onValueChange={(value) => setFormData((prev) => ({ ...prev, retailerId: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select retailer" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {retailers.map((retailer) => (
-                      <SelectItem key={retailer.id} value={retailer.id}>
-                        {retailer.business_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="address">Full Address *</Label>
-                <Input
-                  id="address"
-                  placeholder="123 Main St, City, State 12345"
-                  value={formData.fullAddress}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, fullAddress: e.target.value }))}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone Number</Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  placeholder="+1 (555) 123-4567"
-                  value={formData.phone}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, phone: e.target.value }))}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="timezone">Timezone *</Label>
-                <Select
-                  value={formData.timezone}
-                  onValueChange={(value) => setFormData((prev) => ({ ...prev, timezone: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="America/New_York">Eastern Time</SelectItem>
-                    <SelectItem value="America/Chicago">Central Time</SelectItem>
-                    <SelectItem value="America/Denver">Mountain Time</SelectItem>
-                    <SelectItem value="America/Los_Angeles">Pacific Time</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="flex justify-end space-x-2 pt-4">
-              <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                onClick={handleCreateLocation}
-                disabled={isPending || !formData.name || !formData.retailerId || !formData.fullAddress}
-              >
-                {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Create Location
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <Button>
+          <Plus className="w-4 h-4 mr-2" />
+          Add Location
+        </Button>
       </div>
 
-      {/* Locations Table */}
+      {/* Stats Cards */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Locations</CardTitle>
+            <Building2 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{mockLocationData.length}</div>
+            <p className="text-xs text-muted-foreground">Active facilities</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Capacity</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{mockLocationData.reduce((sum, loc) => sum + loc.capacity, 0)}</div>
+            <p className="text-xs text-muted-foreground">Patient beds</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Current Patients</CardTitle>
+            <Users className="h-4 w-4 text-blue-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-600">
+              {mockLocationData.reduce((sum, loc) => sum + loc.current_patients, 0)}
+            </div>
+            <p className="text-xs text-muted-foreground">Currently admitted</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Utilization</CardTitle>
+            <MapPin className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">
+              {Math.round(
+                (mockLocationData.reduce((sum, loc) => sum + loc.current_patients, 0) /
+                  mockLocationData.reduce((sum, loc) => sum + loc.capacity, 0)) *
+                  100,
+              )}
+              %
+            </div>
+            <p className="text-xs text-muted-foreground">Overall capacity</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Location List */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center">
-            <MapPin className="w-5 h-5 mr-2" />
-            All Locations
-          </CardTitle>
+          <CardTitle>Medical Locations</CardTitle>
+          <CardDescription>Manage all medical facilities and treatment centers</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Location</TableHead>
-                <TableHead>Retailer</TableHead>
-                <TableHead>Address</TableHead>
-                <TableHead>Contact</TableHead>
-                <TableHead>Users</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {locations.map((location) => (
-                <TableRow key={location.id}>
-                  <TableCell>
-                    <div>
-                      <p className="font-medium">{location.name}</p>
-                      <p className="text-sm text-muted-foreground">{location.timezone}</p>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center">
-                      <Building className="w-4 h-4 mr-2 text-muted-foreground" />
-                      {location.retailers.business_name}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <p className="text-sm">{location.full_address}</p>
-                  </TableCell>
-                  <TableCell>
-                    {location.phone && (
-                      <div className="flex items-center text-sm">
-                        <Phone className="w-4 h-4 mr-1 text-muted-foreground" />
-                        {location.phone}
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center">
-                      <Users className="w-4 h-4 mr-1 text-muted-foreground" />
-                      {location.user_location_memberships.filter((m) => m.is_active).length}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={location.is_active ? "default" : "secondary"}>
-                      {location.is_active ? "Active" : "Inactive"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center space-x-2">
-                      <Button variant="outline" size="sm" onClick={() => openEditDialog(location)}>
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleToggleStatus(location.id)}
-                        disabled={isPending}
-                      >
-                        {location.is_active ? (
-                          <ToggleRight className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <ToggleLeft className="w-4 h-4 text-muted-foreground" />
-                        )}
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          {/* Filters */}
+          <div className="flex gap-4 mb-6">
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search locations..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="maintenance">Maintenance</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="hospital">Hospital</SelectItem>
+                <SelectItem value="emergency">Emergency</SelectItem>
+                <SelectItem value="clinic">Clinic</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-          {locations.length === 0 && (
-            <div className="text-center py-8">
-              <MapPin className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">No locations found. Create your first location to get started.</p>
+          {/* Location Cards */}
+          <div className="space-y-4">
+            {filteredLocations.map((location) => (
+              <div key={location.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                      <MapPin className="w-6 h-6 text-gray-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{location.name}</h3>
+                      <p className="text-sm text-gray-600">{location.address}</p>
+                      <p className="text-xs text-gray-500">Manager: {location.manager}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-6">
+                    <div className="text-center">
+                      <div className="flex items-center space-x-2 mb-1">
+                        <Badge className={getTypeColor(location.type)}>{location.type.toUpperCase()}</Badge>
+                        <Badge className={getStatusColor(location.status)}>{location.status.toUpperCase()}</Badge>
+                      </div>
+                      <p className="text-sm text-gray-600">
+                        {location.current_patients}/{location.capacity} patients
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {getUtilizationPercentage(location.current_patients, location.capacity)}% utilization
+                      </p>
+                    </div>
+
+                    <div className="text-right">
+                      <p className="text-sm font-medium text-gray-900">{location.staff_count} staff</p>
+                      <p className="text-xs text-gray-500">{location.phone}</p>
+                    </div>
+
+                    <div className="flex flex-col space-y-1">
+                      <Button variant="outline" size="sm">
+                        <Edit className="w-4 h-4 mr-1" />
+                        Edit
+                      </Button>
+                      <Button variant="outline" size="sm">
+                        <Trash2 className="w-4 h-4 mr-1" />
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Utilization Bar */}
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-xs text-gray-500">Capacity Utilization</span>
+                    <span className="text-xs text-gray-500">
+                      {getUtilizationPercentage(location.current_patients, location.capacity)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full"
+                      style={{
+                        width: `${getUtilizationPercentage(location.current_patients, location.capacity)}%`,
+                      }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {filteredLocations.length === 0 && (
+            <div className="text-center py-8 text-gray-500">
+              <MapPin className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+              <p>No locations found matching your criteria</p>
             </div>
           )}
         </CardContent>
       </Card>
-
-      {/* Edit Location Dialog */}
-      <Dialog open={!!editingLocation} onOpenChange={(open) => !open && setEditingLocation(null)}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Edit Location</DialogTitle>
-            <DialogDescription>Update location details and settings.</DialogDescription>
-          </DialogHeader>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="editName">Location Name *</Label>
-              <Input
-                id="editName"
-                placeholder="Downtown Store"
-                value={formData.name}
-                onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="editRetailer">Retailer *</Label>
-              <Select
-                value={formData.retailerId}
-                onValueChange={(value) => setFormData((prev) => ({ ...prev, retailerId: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select retailer" />
-                </SelectTrigger>
-                <SelectContent>
-                  {retailers.map((retailer) => (
-                    <SelectItem key={retailer.id} value={retailer.id}>
-                      {retailer.business_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="editAddress">Full Address *</Label>
-              <Input
-                id="editAddress"
-                placeholder="123 Main St, City, State 12345"
-                value={formData.fullAddress}
-                onChange={(e) => setFormData((prev) => ({ ...prev, fullAddress: e.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="editPhone">Phone Number</Label>
-              <Input
-                id="editPhone"
-                type="tel"
-                placeholder="+1 (555) 123-4567"
-                value={formData.phone}
-                onChange={(e) => setFormData((prev) => ({ ...prev, phone: e.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="editTimezone">Timezone *</Label>
-              <Select
-                value={formData.timezone}
-                onValueChange={(value) => setFormData((prev) => ({ ...prev, timezone: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="America/New_York">Eastern Time</SelectItem>
-                  <SelectItem value="America/Chicago">Central Time</SelectItem>
-                  <SelectItem value="America/Denver">Mountain Time</SelectItem>
-                  <SelectItem value="America/Los_Angeles">Pacific Time</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="flex justify-end space-x-2 pt-4">
-            <Button variant="outline" onClick={() => setEditingLocation(null)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleUpdateLocation}
-              disabled={isPending || !formData.name || !formData.retailerId || !formData.fullAddress}
-            >
-              {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Update Location
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

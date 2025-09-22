@@ -64,25 +64,57 @@ export async function getAllUsers(filters?: {
       return { error: "Unauthorized to view users" }
     }
 
-    console.log("[v0] Fetching all users...")
+    console.log("[v0] Fetching all users with optimized query...")
 
-    // Get all users from Supabase Auth
-    const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers()
+    // Single optimized query using joins instead of multiple separate queries
+    let profileQuery = supabase.from("user_profiles").select(`
+        id,
+        first_name,
+        last_name,
+        phone,
+        is_active,
+        business_setup_completed,
+        created_at,
+        user_roles (
+          role,
+          retailer_id,
+          retailers (
+            id,
+            name,
+            business_name
+          )
+        ),
+        user_location_memberships (
+          location_id,
+          is_active,
+          locations (
+            id,
+            name,
+            retailers (
+              business_name
+            )
+          )
+        ),
+        user_invitations (
+          status,
+          sent_at,
+          accepted_at
+        )
+      `)
 
-    if (authError) {
-      console.log("[v0] Auth error:", authError)
-      return { error: "Failed to fetch users from auth" }
-    }
-
-    console.log("[v0] Found auth users:", authUsers.users.length)
-
-    let profileQuery = supabase.from("user_profiles").select("*")
-
-    // Apply filters
+    // Apply filters at database level for better performance
     if (filters?.status === "active") {
       profileQuery = profileQuery.eq("is_active", true)
     } else if (filters?.status === "inactive") {
       profileQuery = profileQuery.eq("is_active", false)
+    }
+
+    if (filters?.role) {
+      profileQuery = profileQuery.eq("user_roles.role", filters.role)
+    }
+
+    if (filters?.retailerId) {
+      profileQuery = profileQuery.eq("user_roles.retailer_id", filters.retailerId)
     }
 
     const { data: profiles, error: profileError } = await profileQuery
@@ -99,102 +131,68 @@ export async function getAllUsers(filters?: {
 
     console.log("[v0] Found profiles:", profiles?.length || 0)
 
-    const { data: userRoles, error: rolesError } = await supabase
-      .from("user_roles")
-      .select("user_id, role, retailer_id")
+    // Get auth users - this is still needed for email and metadata
+    const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers()
 
-    if (rolesError) {
-      console.log("[v0] Roles error:", rolesError)
+    if (authError) {
+      console.log("[v0] Auth error:", authError)
+      return { error: "Failed to fetch users from auth" }
     }
 
-    const { data: retailers, error: retailersError } = await supabase
-      .from("retailers")
-      .select("id, name, business_name")
+    console.log("[v0] Found auth users:", authUsers.users.length)
 
-    if (retailersError) {
-      console.log("[v0] Retailers error:", retailersError)
-    }
-
-    const { data: locationMemberships, error: locationsError } = await supabase
-      .from("user_location_memberships")
-      .select("user_id, location_id, is_active")
-
-    if (locationsError) {
-      console.log("[v0] Locations error:", locationsError)
-    }
-
-    const { data: locations, error: locationsDataError } = await supabase
-      .from("locations")
-      .select("id, name, retailer_id")
-
-    if (locationsDataError) {
-      console.log("[v0] Locations data error:", locationsDataError)
-    }
-
-    const { data: invitations } = await supabase.from("user_invitations").select("*")
-
-    console.log("[v0] Found invitations:", invitations?.length || 0)
-
+    // Combine auth data with profile data (much more efficient than before)
     const users: UserWithDetails[] = authUsers.users.map((authUser) => {
-      const profile = profiles?.find((p) => p.user_id === authUser.id)
-      const userInvitations = invitations?.filter((inv) => inv.email === authUser.email) || []
+      const profile = profiles?.find((p) => p.id === authUser.id)
 
-      // Get user roles and combine with retailer data
-      const userRoleRecords = userRoles?.filter((r) => r.user_id === authUser.id) || []
-      const combinedRoles = userRoleRecords.map((role) => {
-        const retailer = retailers?.find((r) => r.id === role.retailer_id)
+      if (!profile) {
+        // Handle users without profiles (pending setup)
         return {
-          role: role.role,
-          retailer_id: role.retailer_id,
-          retailers: retailer
-            ? {
-                id: retailer.id,
-                name: retailer.name,
-                business_name: retailer.business_name,
-              }
-            : undefined,
-        }
-      })
-
-      // Get user location memberships and combine with location data
-      const userLocationRecords = locationMemberships?.filter((l) => l.user_id === authUser.id) || []
-      const combinedLocations = userLocationRecords.map((membership) => {
-        const location = locations?.find((l) => l.id === membership.location_id)
-        const locationRetailer = retailers?.find((r) => r.id === location?.retailer_id)
-        return {
-          location_id: membership.location_id,
-          is_active: membership.is_active,
-          locations: {
-            id: location?.id || membership.location_id,
-            name: location?.name || "Unknown Location",
-            retailers: {
-              business_name: locationRetailer?.business_name || "Unknown Business",
-            },
+          id: authUser.id,
+          email: authUser.email || "",
+          created_at: authUser.created_at,
+          user_metadata: authUser.user_metadata,
+          user_profiles: {
+            first_name: authUser.user_metadata?.first_name || "Pending",
+            last_name: authUser.user_metadata?.last_name || "Setup",
+            phone: authUser.user_metadata?.phone || null,
+            is_active: false,
+            business_setup_completed: false,
+            created_at: authUser.created_at,
           },
+          user_roles: [],
+          user_location_memberships: [],
+          user_invitations: [
+            {
+              status: "sent",
+              sent_at: authUser.created_at,
+              accepted_at: null,
+            },
+          ],
         }
-      })
+      }
 
-      // Include user even if no profile exists yet
+      // Transform the joined data structure
       return {
         id: authUser.id,
         email: authUser.email || "",
         created_at: authUser.created_at,
         user_metadata: authUser.user_metadata,
-        user_profiles: profile || {
-          first_name: authUser.user_metadata?.first_name || "Pending",
-          last_name: authUser.user_metadata?.last_name || "Setup",
-          phone: authUser.user_metadata?.phone || null,
-          is_active: false,
-          business_setup_completed: false,
-          created_at: authUser.created_at,
+        user_profiles: {
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          phone: profile.phone,
+          is_active: profile.is_active,
+          business_setup_completed: profile.business_setup_completed,
+          created_at: profile.created_at,
         },
-        user_roles: combinedRoles,
-        user_location_memberships: combinedLocations,
+        user_roles: profile.user_roles || [],
+        user_location_memberships: profile.user_location_memberships || [],
         user_invitations:
-          userInvitations.length > 0
-            ? userInvitations.map((inv) => ({
+          profile.user_invitations?.length > 0
+            ? profile.user_invitations.map((inv) => ({
                 status: inv.accepted_at ? "accepted" : "sent",
-                sent_at: inv.created_at,
+                sent_at: inv.sent_at,
                 accepted_at: inv.accepted_at,
               }))
             : [
@@ -207,21 +205,8 @@ export async function getAllUsers(filters?: {
       }
     })
 
-    console.log("[v0] Combined users:", users.length)
-
-    // Apply additional filters
+    // Apply search filter (only if needed, to avoid unnecessary processing)
     let filteredUsers = users
-
-    if (filters?.role) {
-      filteredUsers = filteredUsers.filter((user) => user.user_roles.some((role) => role.role === filters.role))
-    }
-
-    if (filters?.retailerId) {
-      filteredUsers = filteredUsers.filter((user) =>
-        user.user_roles.some((role) => role.retailer_id === filters.retailerId),
-      )
-    }
-
     if (filters?.search) {
       const searchTerm = filters.search.toLowerCase()
       filteredUsers = filteredUsers.filter(
